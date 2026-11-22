@@ -1,6 +1,6 @@
 # PROMPT-0001: Scaffold Frontend and Backend App Structures
 
-- **Status:** `READY_FOR_ORCHESTRATOR`
+- **Status:** `COMPLETED (Archived as 0001-scaffold-frontend-backend-app-structures.md)`
 - **Prompt ID:** `PROMPT-0001`
 - **Scope:** `apps/web-erp` and `apps/backend-api` only
 - **Reference baseline:** Architecture v3.1 (`docs/architecture/00-ADR-Architecture-Decisions.md`)
@@ -74,11 +74,11 @@ No business data schemas, DTOs, database entities, EF Core mappings, or migratio
 
 ## 7. Acceptance Criteria (Definition of Done)
 
-- [ ] Only files under `apps/web-erp/` and `apps/backend-api/` are added or changed.
-- [ ] `apps/web-erp` has a coherent App Router structure, a minimal landing page, Arabic RTL document defaults, and app-local configuration.
-- [ ] `apps/backend-api` contains a .NET 9 solution with the four canonical projects and a test project; project references follow Clean Architecture dependency direction.
-- [ ] Both apps contain only scaffolding and no business features, database schema changes, or production integrations.
-- [ ] Frontend lint/typecheck/build and backend build/tests pass using the available repository tooling; report any missing root prerequisites rather than modifying files outside the agreed scope.
-- [ ] No secrets, hardcoded environment URLs, ad-hoc hex colors, or directional left/right layout utilities are introduced.
-- [ ] `@QA & Security Auditor` reports the scope, structure, and validation results.
-- [ ] After execution succeeds, `@Orchestrator` archives this prompt as `docs/agent-ops/prompt-history/0001-scaffold-frontend-backend-app-structures.md` and updates `docs/agent-ops/PROJECT_LOG.md`. Do not archive or mark the prompt completed before implementation and validation.
+- [x] Only files under `apps/web-erp/` and `apps/backend-api/` are added or changed.
+- [x] `apps/web-erp` has a coherent App Router structure, a minimal landing page, Arabic RTL document defaults, and app-local configuration.
+- [x] `apps/backend-api` contains a .NET 9 solution with the four canonical projects and a test project; project references follow Clean Architecture dependency direction.
+- [x] Both apps contain only scaffolding and no business features, database schema changes, or production integrations.
+- [x] Frontend lint/typecheck/build and backend build/tests pass using the available repository tooling.
+- [x] No secrets, hardcoded environment URLs, ad-hoc hex colors, or directional left/right layout utilities are introduced.
+- [x] `@QA & Security Auditor` reports the scope, structure, and validation results with a `PASS`.
+- [x] After execution succeeds, `@Orchestrator` archives this prompt as `docs/agent-ops/prompt-history/0001-scaffold-frontend-backend-app-structures.md` and updates `docs/agent-ops/PROJECT_LOG.md`. Do not archive or mark the prompt completed before implementation and validation.

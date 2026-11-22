@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>AlMomiaa.Infrastructure</AssemblyName>
+    <RootNamespace>AlMomiaa.Infrastructure</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AlMomiaa.Domain\AlMomiaa.Domain.csproj" />
+    <ProjectReference Include="..\AlMomiaa.Application\AlMomiaa.Application.csproj" />
+  </ItemGroup>
+</Project>

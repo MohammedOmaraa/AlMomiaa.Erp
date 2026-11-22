@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>AlMomiaa.Domain</AssemblyName>
+    <RootNamespace>AlMomiaa.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>
