@@ -8,7 +8,8 @@ public sealed class AlMomiaaDbContextFactory : IDesignTimeDbContextFactory<AlMom
     public AlMomiaaDbContext CreateDbContext(string[] args)
     {
         var connectionString = Environment.GetEnvironmentVariable("ALMOMIAA_DESIGNTIME_SQLSERVER")
-            ?? "Server=(localdb)\\mssqllocaldb;Database=AlMomiaaErpDesign;Trusted_Connection=True;TrustServerCertificate=True;";
+            ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer")
+            ?? "Server=localhost;Database=AlMomiaa;Trusted_Connection=True;TrustServerCertificate=True;";
 
         var optionsBuilder = new DbContextOptionsBuilder<AlMomiaaDbContext>();
         optionsBuilder.UseSqlServer(

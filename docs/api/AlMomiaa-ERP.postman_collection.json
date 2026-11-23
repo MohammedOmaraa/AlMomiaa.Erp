@@ -1,0 +1,2437 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-0005-4e9a-9f11-almomiaa0005",
+    "name": "AlMomiaa Enterprise ERP API (v1)",
+    "description": "Complete categorized Postman v2.1 collection covering all 8 ERP modules, authentication, per-column validation payloads, ZATCA Phase 2 invoicing, double-entry finance, dashboards, and audit logs. Run folders 01 -> 10 in order to automatically chain IDs via environment variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "01 - Auth & Health",
+      "description": "Health check and JWT + HttpOnly refresh-cookie authentication lifecycle.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Anonymous liveness check. Returns HTTP 200 `{ \"status\": \"Healthy\" }`.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (Employee Code or Phone)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticates an active employee using phone or employee code. Issues a 10-minute JWT (`accessToken`) and sets the HttpOnly `almomiaa_refresh` cookie. Automatically saves `{{accessToken}}` and `{{currentUserId}}`.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{adminIdentifier}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Login succeeded (200)\", () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "if (data.accessToken) { pm.environment.set(\"accessToken\", data.accessToken); }",
+                  "if (data.user && data.user.id) { pm.environment.set(\"currentUserId\", data.user.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Access Token (Rotating Cookie)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "http://localhost:5173"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Rotates the `almomiaa_refresh` HttpOnly cookie and issues a fresh 10-minute Bearer JWT. Requires a trusted `Origin` header matching `Cors:AllowedOrigins`.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.accessToken) pm.environment.set(\"accessToken\", data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout (Revoke Session Family)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "http://localhost:5173"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the current refresh session family and clears the `almomiaa_refresh` cookie (HTTP 204).",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Users & Roles (IAM)",
+      "description": "Employee provisioning, activation/deactivation, and role permission management.",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users?page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Requires `users:manage`. Supports optional `search`, `roleCode`, `isActive`, `page`, `pageSize`."
+          }
+        },
+        {
+          "name": "Create Sales Rep User (with CashVan Auto-Provision)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users"
+              ]
+            },
+            "description": "Requires `users:manage`. Creates a new employee (`Password` >= 10 chars with upper, lower, digit, special). Saves `{{repUserId}}` and `{{vanWarehouseId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employeeCode\": \"REP-2026-01\",\n  \"fullNameAr\": \"خالد العتيبي\",\n  \"fullNameEn\": \"Khalid Al-Otaibi\",\n  \"phone\": \"+966501234567\",\n  \"email\": \"khalid.rep@almomiaa.sa\",\n  \"password\": \"ChangeMe!2026#Rep\",\n  \"repType\": \"CashVan\",\n  \"defaultWarehouseId\": null,\n  \"roleIds\": [\n    4\n  ],\n  \"assignedWarehouseIds\": [],\n  \"createMobileVan\": true,\n  \"vehiclePlateNumber\": \"ABC 1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const d = pm.response.json();",
+                  "  pm.environment.set(\"repUserId\", d.id);",
+                  "  if (d.defaultWarehouseId) pm.environment.set(\"vanWarehouseId\", String(d.defaultWarehouseId));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update User Active Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/{{repUserId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{repUserId}}",
+                "status"
+              ]
+            },
+            "description": "Requires `users:manage`. Deactivating a user (`isActive: false`) rotates their SecurityStamp and immediately revokes active JWTs.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List Roles & Permissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles"
+              ]
+            },
+            "description": "Requires `permissions:manage`. Lists all 7 canonical ERP roles and their permission claims."
+          }
+        },
+        {
+          "name": "Replace Role Permissions",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles/3/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "3",
+                "permissions"
+              ]
+            },
+            "description": "Requires `permissions:manage`. Replaces permission claims for a role (e.g. roleId 3 = `SALES_MGR`) and rotates security stamps of all affected users.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": [\n    \"users:manage\",\n    \"dashboards:sales\",\n    \"dashboards:finance\",\n    \"dashboards:inventory\",\n    \"customers:view\",\n    \"customers:manage\",\n    \"catalog:view\",\n    \"catalog:manage\",\n    \"orders:create\",\n    \"orders:edit_submitted\",\n    \"orders:override_price\",\n    \"orders:approve\",\n    \"invoices:view\",\n    \"invoices:upload_copy\",\n    \"sales:returns\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Customers & Credit Grades",
+      "description": "Customer onboarding, dynamic credit grades (A/B/C/D), and live credit-status lookups.",
+      "item": [
+        {
+          "name": "List Customer Grades",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers/grades",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customers",
+                "grades"
+              ]
+            },
+            "description": "Requires `customers:view`. Returns seeded grades A (90d), B (60d), C (30d), D (0d Cash Only)."
+          }
+        },
+        {
+          "name": "Update Customer Grade Policies",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers/grades",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customers",
+                "grades"
+              ]
+            },
+            "description": "Requires `settings:manage`. Updates dynamic payment days and credit allowance per grade code (A..D).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"grades\": [\n    {\n      \"gradeCode\": \"A\",\n      \"defaultPaymentDays\": 90,\n      \"allowCredit\": true\n    },\n    {\n      \"gradeCode\": \"B\",\n      \"defaultPaymentDays\": 60,\n      \"allowCredit\": true\n    },\n    {\n      \"gradeCode\": \"C\",\n      \"defaultPaymentDays\": 30,\n      \"allowCredit\": true\n    },\n    {\n      \"gradeCode\": \"D\",\n      \"defaultPaymentDays\": 0,\n      \"allowCredit\": false\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customers"
+              ]
+            },
+            "description": "Requires `customers:manage`. `category` must be `Market`, `Store`, `Restaurant`, `Supermarket`, or `Wholesale`. `vatNumber` if supplied must be exactly 15 digits. Saves `{{customerId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerCode\": \"CUST-RYD-001\",\n  \"nameAr\": \"أسواق النخبة المركزية\",\n  \"nameEn\": \"Al-Nokhba Central Markets\",\n  \"phone\": \"+966551112233\",\n  \"address\": \"طريق الملك فهد، حي العليا\",\n  \"city\": \"Riyadh\",\n  \"category\": \"Supermarket\",\n  \"vatNumber\": \"310123456700003\",\n  \"gradeId\": 2,\n  \"priceListId\": null,\n  \"customPaymentDays\": 45,\n  \"creditLimit\": 50000,\n  \"assignedRepId\": \"{{currentUserId}}\",\n  \"latitude\": 24.7136,\n  \"longitude\": 46.6753\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.environment.set(\"customerId\", pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Customers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers?page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Requires `customers:view`. Sales Reps automatically see only their own assigned customers (ABAC)."
+          }
+        },
+        {
+          "name": "Get Customer Credit Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers/{{customerId}}/credit-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customers",
+                "{{customerId}}",
+                "credit-status"
+              ]
+            },
+            "description": "Requires `customers:view`. Returns credit limit, current balance, overdue debt, and recent orders."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Catalog & Pricing",
+      "description": "Categories, brands, multi-unit master products, supplier-product links, and tiered price lists (MR-02).",
+      "item": [
+        {
+          "name": "Create Category",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/catalog/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "catalog",
+                "categories"
+              ]
+            },
+            "description": "Requires `catalog:manage`. Saves `{{categoryId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parentCategoryId\": null,\n  \"nameAr\": \"العناية الشخصية\",\n  \"nameEn\": \"Personal Care\",\n  \"displayOrder\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"categoryId\", String(pm.response.json().id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Category Tree",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/catalog/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "catalog",
+                "categories"
+              ]
+            },
+            "description": "Requires `catalog:view`. Returns nested hierarchical category tree."
+          }
+        },
+        {
+          "name": "Create Brand",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/catalog/brands",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "catalog",
+                "brands"
+              ]
+            },
+            "description": "Requires `catalog:manage`. Saves `{{brandId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nameAr\": \"المومياء الذهبية\",\n  \"nameEn\": \"AlMomiaa Gold\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"brandId\", String(pm.response.json().id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Brands",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/catalog/brands",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "catalog",
+                "brands"
+              ]
+            },
+            "description": "Requires `catalog:view`."
+          }
+        },
+        {
+          "name": "Create Master Product (Multi-Unit)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/catalog/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "catalog",
+                "products"
+              ]
+            },
+            "description": "Requires `catalog:manage`. Enforces `minAllowedSellingPrice <= wholesaleSellingPrice <= retailSellingPrice` and unique SKU/barcode. Saves `{{productId}}` and `{{productUnitId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"ALM-SHMP-400\",\n  \"barcode\": \"6281000001001\",\n  \"nameAr\": \"شامبو المومياء 400 مل\",\n  \"nameEn\": \"AlMomiaa Shampoo 400ml\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"brandId\": \"{{brandId}}\",\n  \"baseUnit\": \"Piece\",\n  \"weightedAvgCost\": 12.5,\n  \"wholesaleSellingPrice\": 18,\n  \"retailSellingPrice\": 24,\n  \"minAllowedSellingPrice\": 15,\n  \"vatRate\": 15,\n  \"units\": [\n    {\n      \"unitNameAr\": \"حبة\",\n      \"unitNameEn\": \"Piece\",\n      \"conversionFactor\": 1,\n      \"barcode\": \"6281000001001\",\n      \"wholesalePrice\": 18,\n      \"retailPrice\": 24,\n      \"minAllowedPrice\": 15,\n      \"isDefaultUnit\": true\n    },\n    {\n      \"unitNameAr\": \"كرتون 12 حبة\",\n      \"unitNameEn\": \"Carton (12x)\",\n      \"conversionFactor\": 12,\n      \"barcode\": \"6281000001012\",\n      \"wholesalePrice\": 210,\n      \"retailPrice\": 276,\n      \"minAllowedPrice\": 180,\n      \"isDefaultUnit\": false\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const p = pm.response.json();",
+                  "  pm.environment.set(\"productId\", p.id);",
+                  "  if (p.units && p.units.length > 0) pm.environment.set(\"productUnitId\", p.units[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Master Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/catalog/products?page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "catalog",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Requires `catalog:view`. Masks `weightedAvgCost` as `null` for non-cost-authorized roles (e.g. Sales Rep)."
+          }
+        },
+        {
+          "name": "Create Tiered Price List (MR-02)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/catalog/price-lists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "catalog",
+                "price-lists"
+              ]
+            },
+            "description": "Requires `catalog:manage`. Creates a tiered price list with minimum quantity pricing. Saves `{{priceListId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceListCode\": \"WHOLESALE-2026\",\n  \"nameAr\": \"قائمة أسعار الجملة 2026\",\n  \"nameEn\": \"Wholesale Price List 2026\",\n  \"isDefault\": true,\n  \"effectiveFromUtc\": \"2026-01-01T00:00:00Z\",\n  \"effectiveToUtc\": null,\n  \"items\": [\n    {\n      \"productUnitId\": \"{{productUnitId}}\",\n      \"minQuantity\": 1,\n      \"tierUnitPrice\": 18\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"priceListId\", String(pm.response.json().id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Price Lists",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/catalog/price-lists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "catalog",
+                "price-lists"
+              ]
+            },
+            "description": "Requires `catalog:view`."
+          }
+        },
+        {
+          "name": "Get Category Products (Customer Tier Price + Stock)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/catalog/categories/{{categoryId}}/products?customerId={{customerId}}&warehouseId={{warehouseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "catalog",
+                "categories",
+                "{{categoryId}}",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "customerId",
+                  "value": "{{customerId}}"
+                },
+                {
+                  "key": "warehouseId",
+                  "value": "{{warehouseId}}"
+                }
+              ]
+            },
+            "description": "Requires `catalog:view`. Resolves customer tier price and live warehouse available quantity."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Warehouses & Inventory",
+      "description": "Main/Branch/MobileVan warehouses, stock balances, inter-warehouse transfers, and physical counts.",
+      "item": [
+        {
+          "name": "Create Main Warehouse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/warehouses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "warehouses"
+              ]
+            },
+            "description": "Requires `settings:manage`. `warehouseType`: `MainWarehouse`, `BranchWarehouse`, or `MobileVan`. Saves `{{warehouseId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseCode\": \"WH-RYD-MAIN\",\n  \"nameAr\": \"المستودع الرئيسي - الرياض\",\n  \"nameEn\": \"Riyadh Main Warehouse\",\n  \"warehouseType\": \"MainWarehouse\",\n  \"assignedRepId\": null,\n  \"vehiclePlateNumber\": null,\n  \"city\": \"Riyadh\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"warehouseId\", String(pm.response.json().id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Branch Warehouse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/warehouses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "warehouses"
+              ]
+            },
+            "description": "Requires `settings:manage`. Creates a destination branch warehouse for transfer testing. Saves `{{branchWarehouseId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseCode\": \"WH-JED-BR1\",\n  \"nameAr\": \"مستودع فرع جدة\",\n  \"nameEn\": \"Jeddah Branch Warehouse\",\n  \"warehouseType\": \"BranchWarehouse\",\n  \"assignedRepId\": null,\n  \"vehiclePlateNumber\": null,\n  \"city\": \"Jeddah\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"branchWarehouseId\", String(pm.response.json().id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Warehouses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/warehouses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "warehouses"
+              ]
+            },
+            "description": "Requires `inventory:view`. Warehouse Keepers only see assigned warehouses (ABAC)."
+          }
+        },
+        {
+          "name": "Get Warehouse Stock Balances",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/warehouses/{{warehouseId}}/stocks?page=1&pageSize=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "warehouses",
+                "{{warehouseId}}",
+                "stocks"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Requires `inventory:view`. Returns PhysicalQty, ReservedQty, IncomingQty, and computed AvailableQty."
+          }
+        },
+        {
+          "name": "Dispatch Inter-Warehouse Stock Transfer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/warehouses/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "warehouses",
+                "transfers"
+              ]
+            },
+            "description": "Requires `inventory:transfer`. Run after receiving goods via Folder 06 GRN so source warehouse has available stock. Saves `{{transferId}}` and `{{transferItemId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transferNumber\": null,\n  \"sourceWarehouseId\": \"{{warehouseId}}\",\n  \"destinationWarehouseId\": \"{{branchWarehouseId}}\",\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"requestedQty\": 10,\n      \"dispatchedQty\": 10\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const t = pm.response.json();",
+                  "  pm.environment.set(\"transferId\", t.id);",
+                  "  if (t.items && t.items.length > 0) pm.environment.set(\"transferItemId\", t.items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Receive Stock Transfer",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/warehouses/transfers/{{transferId}}/receive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "warehouses",
+                "transfers",
+                "{{transferId}}",
+                "receive"
+              ]
+            },
+            "description": "Requires `inventory:transfer`. Adds received quantities to destination warehouse and appends `TransferIn` StockMovement.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"stockTransferItemId\": \"{{transferItemId}}\",\n      \"receivedQty\": 10\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Submit Physical Inventory Count Adjustment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/warehouses/{{warehouseId}}/inventory-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "warehouses",
+                "{{warehouseId}}",
+                "inventory-count"
+              ]
+            },
+            "description": "Requires `inventory:adjust`. Reconciles physical count against current balance (cannot be lower than ReservedQty) and appends `Adjustment` StockMovement.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"countedPhysicalQty\": 90,\n      \"lotNumber\": \"LOT-2026-A1\",\n      \"expiryDate\": \"2028-12-31\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Procurement & Containers",
+      "description": "Suppliers, purchase orders, import shipping containers, and Goods Receipt Notes (GRN + WAC recalculation).",
+      "item": [
+        {
+          "name": "Create Supplier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/procurement/suppliers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "procurement",
+                "suppliers"
+              ]
+            },
+            "description": "Requires `procurement:manage`. Saves `{{supplierId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplierCode\": \"SUP-CN-001\",\n  \"nameAr\": \"مصنع الشرق للتوريدات\",\n  \"nameEn\": \"Orient Global Supplies Co.\",\n  \"country\": \"China\",\n  \"phone\": \"+8613800138000\",\n  \"vatNumber\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"supplierId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Suppliers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/procurement/suppliers?page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "procurement",
+                "suppliers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Requires `procurement:manage`."
+          }
+        },
+        {
+          "name": "Link Supplier to Master Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/catalog/products/{{productId}}/suppliers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "catalog",
+                "products",
+                "{{productId}}",
+                "suppliers"
+              ]
+            },
+            "description": "Requires `catalog:manage`. Links supplier SKU, barcode, and last purchase price to a master product.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplierId\": \"{{supplierId}}\",\n  \"supplierSku\": \"OGS-SHMP-400\",\n  \"supplierBarcode\": \"6901000004001\",\n  \"lastPurchasePrice\": 11.25,\n  \"leadTimeDays\": 35,\n  \"isPreferredSupplier\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create Purchase Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/procurement/purchase-orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "procurement",
+                "purchase-orders"
+              ]
+            },
+            "description": "Requires `procurement:manage`. `orderType`: `ContainerImport` or `LocalSupplierOrder`. Increments `IncomingQty`. Saves `{{purchaseOrderId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplierId\": \"{{supplierId}}\",\n  \"targetWarehouseId\": \"{{warehouseId}}\",\n  \"orderType\": \"ContainerImport\",\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"orderedQty\": 100,\n      \"unitCostSAR\": 11.5\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"purchaseOrderId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Purchase Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/procurement/purchase-orders?page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "procurement",
+                "purchase-orders"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Requires `procurement:manage`."
+          }
+        },
+        {
+          "name": "Register Import Container",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/procurement/containers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "procurement",
+                "containers"
+              ]
+            },
+            "description": "Requires `procurement:manage`. `status`: `AtSea`, `ArrivedPort`, `CustomsClearance`, `InTransitRiyadh`, or `ReceivedAtWarehouse`. Saves `{{containerId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"purchaseOrderId\": \"{{purchaseOrderId}}\",\n  \"containerNumber\": \"MSCU-2026-8841\",\n  \"billOfLading\": \"BOL-99887766\",\n  \"shippingLine\": \"MSC Mediterranean Shipping\",\n  \"portOfArrival\": \"Jeddah Islamic Port\",\n  \"estimatedArrivalDate\": \"2026-12-01\",\n  \"actualArrivalDate\": null,\n  \"status\": \"InTransitRiyadh\",\n  \"supplierGoodsCostSAR\": 1150,\n  \"freightAndCustomsCostSAR\": 250\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"containerId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Goods Receipt Note (GRN + WAC)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/procurement/goods-receipts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "procurement",
+                "goods-receipts"
+              ]
+            },
+            "description": "Requires `procurement:receive`. Recalculates `MasterProduct.WeightedAvgCost`, increments `PhysicalQty`, decrements `IncomingQty`, updates supplier payable, and appends `GoodsReceipt` StockMovement.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"purchaseOrderId\": \"{{purchaseOrderId}}\",\n  \"containerId\": \"{{containerId}}\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"receivedQty\": 100,\n      \"allocatedLandedUnitCostSAR\": 14,\n      \"lotNumber\": \"LOT-2026-A1\",\n      \"expiryDate\": \"2028-12-31\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"grnId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 - Sales Orders & Approval Workflow",
+      "description": "Order submission (MR-01/MR-02/MR-03/RISK-01/RISK-03), manager edit, price override, credit co-approval, approval/rejection, and shipment invoicing.",
+      "item": [
+        {
+          "name": "Submit Sales Order (Idempotent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders"
+              ]
+            },
+            "description": "Requires `orders:create` and `X-Idempotency-Key` GUID header. Evaluates tier/floor pricing, 24h soft stock reservation, shortage warnings, and credit-limit co-approval flags. Saves `{{orderId}}` and `{{orderItemId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderChannel\": \"PreSales\",\n  \"customerId\": \"{{customerId}}\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"productUnitId\": \"{{productUnitId}}\",\n      \"orderedQty\": 5,\n      \"unitPrice\": 18\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const o = pm.response.json();",
+                  "  pm.environment.set(\"orderId\", o.id);",
+                  "  if (o.items && o.items.length > 0) pm.environment.set(\"orderItemId\", o.items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Sales Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders?page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Requires `customers:view`. Automatically row-scoped for Sales Reps and Warehouse Keepers."
+          }
+        },
+        {
+          "name": "Manager Edit Submitted Order",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/manager-edit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "{{orderId}}",
+                "manager-edit"
+              ]
+            },
+            "description": "Requires `orders:edit_submitted` (Sales Manager / Super Admin only; Sales Reps receive 403). Reconciles reserved stock delta and records old/new audit snapshot.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"salesOrderItemId\": \"{{orderItemId}}\",\n      \"approvedQty\": 4,\n      \"unitPrice\": 18.5\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Approve Price Override (MR-02)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/override-price",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "{{orderId}}",
+                "override-price"
+              ]
+            },
+            "description": "Requires `orders:override_price`. Clears pending below-tier/below-floor price override flags."
+          }
+        },
+        {
+          "name": "Co-Approve Credit Exception (MR-03)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/co-approve-credit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "{{orderId}}",
+                "co-approve-credit"
+              ]
+            },
+            "description": "Requires `orders:coapprove_credit` (Accountant / Exec / Super Admin). Call only when `requiresFinanceCoApproval` is `true` (returns 422 if order does not require co-approval)."
+          }
+        },
+        {
+          "name": "Approve Sales Order",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "{{orderId}}",
+                "approve"
+              ]
+            },
+            "description": "Requires `orders:approve`. Fails with 422 if credit co-approval, price override, or stock shortage is unresolved."
+          }
+        },
+        {
+          "name": "Reject Sales Order (Optional Alternate Path)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "{{orderId}}",
+                "reject"
+              ]
+            },
+            "description": "Requires `orders:approve`. Rejects a PendingApproval/Approved order and releases soft-reserved stock.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rejectionReason\": \"العميل طلب تأجيل الشحنة للأسبوع القادم\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Confirm Shipment & Issue ZATCA Invoice (Idempotent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/confirm-shipment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "{{orderId}}",
+                "confirm-shipment"
+              ]
+            },
+            "description": "Requires `warehouse:ship` and `X-Idempotency-Key` GUID header. Ensure EGS device is registered in Folder 08 first! Deducts stock, appends `SalesShipment`, increments ZATCA ICV/PIH, builds TLV QR, and debits customer. Saves `{{invoiceId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"egsDeviceId\": \"{{egsDeviceId}}\",\n  \"invoiceType\": \"StandardB2B\",\n  \"items\": [\n    {\n      \"salesOrderItemId\": \"{{orderItemId}}\",\n      \"shippedQty\": 4\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) pm.environment.set(\"invoiceId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 - ZATCA Invoices, Returns & Delivery",
+      "description": "EGS device registration, ZATCA invoice print payload, paper copy upload, credit note returns (381), and delivery POD.",
+      "item": [
+        {
+          "name": "Register ZATCA EGS Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoices/egs-devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "invoices",
+                "egs-devices"
+              ]
+            },
+            "description": "Requires `settings:manage`. Run before Confirm Shipment! Initializes ICV=0 and initial PIH (`SHA256(\"0\")`). Saves `{{egsDeviceId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"egsDeviceId\": \"EGS-RYD-WH01\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"certificateSerial\": \"ZATCA-CERT-2026-0001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"egsDeviceId\", pm.response.json().egsDeviceId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get ZATCA Invoice Print Payload",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoices/{{invoiceId}}/print",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "invoices",
+                "{{invoiceId}}",
+                "print"
+              ]
+            },
+            "description": "Requires `invoices:view`. Returns invoice totals, ZATCA ICV/UUID/PIH/XML hash, TLV Base64 QR, customer info, and lines."
+          }
+        },
+        {
+          "name": "Upload Signed Paper Invoice Copy URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoices/{{invoiceId}}/upload-copy",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "invoices",
+                "{{invoiceId}}",
+                "upload-copy"
+              ]
+            },
+            "description": "Requires `invoices:upload_copy`. Attaches scanned/stamped copy storage URL.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uploadedInvoiceCopyUrl\": \"https://storage.almomiaa.sa/invoices/2026/signed-copy-001.pdf\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create Delivery Dispatch Manifest",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/delivery/dispatches",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "delivery",
+                "dispatches"
+              ]
+            },
+            "description": "Requires `delivery:dispatch`. Assigns one or more invoices to a driver/rep. Saves `{{dispatchId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"driverOrRepId\": \"{{currentUserId}}\",\n  \"vehiclePlateNumber\": \"RYD 4589\",\n  \"invoiceIds\": [\n    \"{{invoiceId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"dispatchId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Delivery Proof of Delivery (POD)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/delivery/dispatches/{{dispatchId}}/items/{{invoiceId}}/pod",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "delivery",
+                "dispatches",
+                "{{dispatchId}}",
+                "items",
+                "{{invoiceId}}",
+                "pod"
+              ]
+            },
+            "description": "Requires `delivery:update_pod`. `deliveryStatus`: `PreparedAtWarehouse`, `OutForDelivery`, `Delivered`, or `FailedAttempt`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deliveryStatus\": \"Delivered\",\n  \"signedPodImageUrl\": \"https://storage.almomiaa.sa/pod/2026/pod-001.jpg\",\n  \"deliveryNotes\": \"تم التسليم والاستلام بختم العميل\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create Sales Return / ZATCA Credit Note (381)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/returns",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "returns"
+              ]
+            },
+            "description": "Requires `sales:returns`. Issues ZATCA Credit Note with next monotonic ICV, credits customer balance, and restocks sellable units (`isSellableRestock: true`).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originalInvoiceId\": \"{{invoiceId}}\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"returnReason\": \"تلف عبوة أثناء النقل - مرتجع جزئي\",\n  \"egsDeviceId\": \"{{egsDeviceId}}\",\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"productUnitId\": \"{{productUnitId}}\",\n      \"returnedQty\": 1,\n      \"isSellableRestock\": true,\n      \"unitPrice\": 18.5\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"returnId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 - Collections, Custody & Finance",
+      "description": "Financial accounts, fiscal periods (MR-05), cash custody & treasury handover, bank transfers with SHA-256 deduplication, and double-entry ledger.",
+      "item": [
+        {
+          "name": "Create Main Treasury Safe Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "accounts"
+              ]
+            },
+            "description": "Requires `settings:manage`. Saves `{{treasuryAccountId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountCode\": \"SAFE-MAIN-01\",\n  \"nameAr\": \"الخزينة الرئيسية - الرياض\",\n  \"nameEn\": \"Riyadh Main Treasury Safe\",\n  \"accountType\": \"MainTreasurySafe\",\n  \"ownerRepId\": null,\n  \"bankName\": null,\n  \"iban\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"treasuryAccountId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Bank Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "accounts"
+              ]
+            },
+            "description": "Requires `settings:manage`. Saves `{{bankAccountId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountCode\": \"BANK-SNB-01\",\n  \"nameAr\": \"البنك الأهلي السعودي - الحساب الرئيسي\",\n  \"nameEn\": \"SNB Main Operating Account\",\n  \"accountType\": \"BankAccount\",\n  \"ownerRepId\": null,\n  \"bankName\": \"Saudi National Bank (SNB)\",\n  \"iban\": \"SA4410000001234567890101\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"bankAccountId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Financial Accounts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "accounts"
+              ]
+            },
+            "description": "Requires `dashboards:finance`."
+          }
+        },
+        {
+          "name": "Open Current Fiscal Period",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/fiscal-periods",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "fiscal-periods"
+              ]
+            },
+            "description": "Requires `finance:close_period`. Must be open for the current UTC year/month before recording cash collections, handovers, or bank verifications! Saves `{{fiscalPeriodId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fiscalYear\": 2026,\n  \"fiscalMonth\": 11\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"fiscalPeriodId\", String(pm.response.json().id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Fiscal Periods",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/fiscal-periods",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "fiscal-periods"
+              ]
+            },
+            "description": "Requires `dashboards:finance`."
+          }
+        },
+        {
+          "name": "Record Cash Collection into Rep Custody (Idempotent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/collections/cash",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "cash"
+              ]
+            },
+            "description": "Requires `collections:create` and `X-Idempotency-Key` GUID. Posts balanced journal (`DR RepCustodyWallet / CR AccountsReceivable`). Saves `{{cashCollectionId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"amount\": 30,\n  \"allocations\": [\n    {\n      \"invoiceId\": \"{{invoiceId}}\",\n      \"allocatedAmount\": 30\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"cashCollectionId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer Confirm Cash Receipt",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/collections/{{cashCollectionId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "{{cashCollectionId}}",
+                "confirm"
+              ]
+            },
+            "description": "Requires `collections:create`. Marks receipt as confirmed by customer."
+          }
+        },
+        {
+          "name": "Confirm Treasury Handover (Rep Custody -> Main Safe)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/collections/handover",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "handover"
+              ]
+            },
+            "description": "Requires `finance:confirm_treasury`. Moves funds from `RepCustodyWallet` to `MainTreasurySafe` with a balanced journal entry.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collectionId\": \"{{cashCollectionId}}\",\n  \"targetTreasuryAccountId\": \"{{treasuryAccountId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Submit Bank Transfer Proof (Idempotent + SHA-256 Dedupe)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/collections/bank-transfer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "bank-transfer"
+              ]
+            },
+            "description": "Requires `collections:create` and `X-Idempotency-Key` GUID. `paymentProofImageHash` must be a unique 64-char SHA-256 hex digest (reusing returns `409 Conflict`). Saves `{{bankCollectionId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"amount\": 25,\n  \"bankReferenceNumber\": \"SNB-TRX-20261123-001\",\n  \"paymentProofImageUrl\": \"https://storage.almomiaa.sa/transfers/2026/slip-001.jpg\",\n  \"paymentProofImageHash\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n  \"originalValueDateUtc\": \"2026-11-20T10:00:00Z\",\n  \"allocations\": [\n    {\n      \"invoiceId\": \"{{invoiceId}}\",\n      \"allocatedAmount\": 25\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"bankCollectionId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Bank Transfer (Accountant Approval, MR-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/collections/{{bankCollectionId}}/verify-bank",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "collections",
+                "{{bankCollectionId}}",
+                "verify-bank"
+              ]
+            },
+            "description": "Requires `finance:verify_bank`. Posts balanced journal (`DR BankAccount / CR AccountsReceivable`), credits customer, and preserves `originalValueDateUtc`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetBankAccountId\": \"{{bankAccountId}}\",\n  \"approve\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List Double-Entry Journal Entries",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/journal-entries?page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "journal-entries"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Requires `dashboards:finance`. Returns immutable balanced journal entries (`SUM(Debit) == SUM(Credit)`)."
+          }
+        },
+        {
+          "name": "Close Fiscal Period (MR-05 Lock)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/finance/fiscal-periods/{{fiscalPeriodId}}/close",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "finance",
+                "fiscal-periods",
+                "{{fiscalPeriodId}}",
+                "close"
+              ]
+            },
+            "description": "Requires `finance:close_period`. Locks the fiscal period so any further postings in that month fail with HTTP 422."
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Dashboards, Audit Logs & GPS",
+      "description": "Executive KPIs, role-scoped dashboards, immutable audit trail, and field rep GPS telemetry.",
+      "item": [
+        {
+          "name": "Get Executive Dashboard Snapshot",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboards/executive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dashboards",
+                "executive"
+              ]
+            },
+            "description": "Requires `dashboards:executive`. Aggregates main safe, rep custody, bank balance, receivables, payables, and inventory valuation."
+          }
+        },
+        {
+          "name": "Get Sales Role Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboards/role/sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dashboards",
+                "role",
+                "sales"
+              ]
+            },
+            "description": "Requires `dashboards:sales`. Supported views: `sales`, `inventory`, `warehouse`, `finance`, `rep`."
+          }
+        },
+        {
+          "name": "Get Inventory Role Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboards/role/inventory",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dashboards",
+                "role",
+                "inventory"
+              ]
+            },
+            "description": "Requires `dashboards:inventory`."
+          }
+        },
+        {
+          "name": "Get Finance Role Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dashboards/role/finance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dashboards",
+                "role",
+                "finance"
+              ]
+            },
+            "description": "Requires `dashboards:finance`."
+          }
+        },
+        {
+          "name": "Query Immutable Audit Logs (Keyset Cursor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit-logs?pageSize=25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "25"
+                }
+              ]
+            },
+            "description": "Requires `audit:view`. Filterable by `entityName`, `userId`, and `cursor` (last returned `id`)."
+          }
+        },
+        {
+          "name": "Stream Field Rep GPS Pings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/gps/pings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "gps",
+                "pings"
+              ]
+            },
+            "description": "Requires `gps:stream` (assigned to `SALES_REP` role). Accepts up to 100 pings per batch with Latitude [-90..90] and Longitude [-180..180].",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pings\": [\n    {\n      \"latitude\": 24.7136,\n      \"longitude\": 46.6753,\n      \"accuracyMeters\": 8.5,\n      \"nearCustomerId\": \"{{customerId}}\",\n      \"recordedAtUtc\": \"2026-11-23T09:00:00Z\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

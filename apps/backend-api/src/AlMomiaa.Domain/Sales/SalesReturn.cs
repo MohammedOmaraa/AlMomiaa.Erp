@@ -31,4 +31,41 @@ public sealed class SalesReturn
     public User ApprovedByUser { get; private init; } = null!;
     public DateTime CreatedAtUtc { get; private set; }
     public ICollection<SalesReturnItem> Items { get; private init; } = new List<SalesReturnItem>();
+
+    public static SalesReturn Create(
+        string creditNoteNumber,
+        Guid originalInvoiceId,
+        Guid customerId,
+        int warehouseId,
+        string returnReason,
+        decimal subTotal,
+        decimal vatAmount,
+        decimal totalAmount,
+        string egsDeviceId,
+        long zatcaIcv,
+        Guid zatcaUuid,
+        string zatcaXmlHash,
+        string zatcaQrCodeBase64,
+        Guid approvedByUserId,
+        DateTime createdAtUtc) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            CreditNoteNumber = creditNoteNumber.Trim().ToUpperInvariant(),
+            OriginalInvoiceId = originalInvoiceId,
+            CustomerId = customerId,
+            WarehouseId = warehouseId,
+            ReturnReason = returnReason.Trim(),
+            SubTotal = subTotal,
+            VatAmount = vatAmount,
+            TotalAmount = totalAmount,
+            EgsDeviceId = egsDeviceId,
+            ZatcaIcv = zatcaIcv,
+            ZatcaUuid = zatcaUuid,
+            ZatcaXmlHash = zatcaXmlHash,
+            ZatcaQrCodeBase64 = zatcaQrCodeBase64,
+            ZatcaSubmissionStatus = "Pending",
+            ApprovedByUserId = approvedByUserId,
+            CreatedAtUtc = createdAtUtc
+        };
 }

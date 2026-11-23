@@ -46,6 +46,9 @@ public static class CanonicalRolesAndPermissions
         public const string FinanceClosePeriod = "finance:close_period";
         public const string ProcurementManage = "procurement:manage";
         public const string ProcurementReceive = "procurement:receive";
+        public const string InventoryView = "inventory:view";
+        public const string InventoryTransfer = "inventory:transfer";
+        public const string InventoryAdjust = "inventory:adjust";
         public const string AuditView = "audit:view";
         public const string GpsStream = "gps:stream";
     }
@@ -87,6 +90,9 @@ public static class CanonicalRolesAndPermissions
                 Permissions.FinanceClosePeriod,
                 Permissions.ProcurementManage,
                 Permissions.ProcurementReceive,
+                Permissions.InventoryView,
+                Permissions.InventoryTransfer,
+                Permissions.InventoryAdjust,
                 Permissions.AuditView
             ]),
         new(
@@ -110,6 +116,7 @@ public static class CanonicalRolesAndPermissions
                 Permissions.SalesReturns,
                 Permissions.FinanceClosePeriod,
                 Permissions.ProcurementManage,
+                Permissions.InventoryView,
                 Permissions.AuditView
             ]),
         new(
@@ -187,7 +194,10 @@ public static class CanonicalRolesAndPermissions
                 Permissions.InvoicesView,
                 Permissions.InvoicesUploadCopy,
                 Permissions.SalesReturns,
-                Permissions.ProcurementReceive
+                Permissions.ProcurementReceive,
+                Permissions.InventoryView,
+                Permissions.InventoryTransfer,
+                Permissions.InventoryAdjust
             ]),
         new(
             7,
@@ -199,7 +209,9 @@ public static class CanonicalRolesAndPermissions
                 Permissions.CatalogView,
                 Permissions.CatalogManage,
                 Permissions.ProcurementManage,
-                Permissions.ProcurementReceive
+                Permissions.ProcurementReceive,
+                Permissions.InventoryView,
+                Permissions.InventoryTransfer
             ])
     ];
 }

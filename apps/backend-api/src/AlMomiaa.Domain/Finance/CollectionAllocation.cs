@@ -12,4 +12,13 @@ public sealed class CollectionAllocation
     public Guid InvoiceId { get; private set; }
     public Invoice Invoice { get; private init; } = null!;
     public decimal AllocatedAmount { get; private set; }
+
+    public static CollectionAllocation Create(Guid collectionId, Guid invoiceId, decimal allocatedAmount) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            CollectionId = collectionId,
+            InvoiceId = invoiceId,
+            AllocatedAmount = Math.Round(allocatedAmount, 2, MidpointRounding.AwayFromZero)
+        };
 }

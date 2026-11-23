@@ -15,4 +15,28 @@ public sealed class ProductUnit
     public decimal RetailPrice { get; private set; }
     public decimal MinAllowedPrice { get; private set; }
     public bool IsDefaultUnit { get; private set; } = true;
+
+    public static ProductUnit Create(
+        Guid masterProductId,
+        string unitNameAr,
+        string unitNameEn,
+        decimal conversionFactor,
+        string barcode,
+        decimal wholesalePrice,
+        decimal retailPrice,
+        decimal minAllowedPrice,
+        bool isDefaultUnit) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            MasterProductId = masterProductId,
+            UnitNameAr = unitNameAr.Trim(),
+            UnitNameEn = unitNameEn.Trim(),
+            ConversionFactor = conversionFactor,
+            Barcode = barcode.Trim(),
+            WholesalePrice = wholesalePrice,
+            RetailPrice = retailPrice,
+            MinAllowedPrice = minAllowedPrice,
+            IsDefaultUnit = isDefaultUnit
+        };
 }

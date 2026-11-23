@@ -26,4 +26,50 @@ public sealed class SalesOrderItem
     public decimal UnitCostSnapshot { get; private set; }
     public decimal VatAmount { get; private set; }
     public decimal LineTotal { get; private set; }
+
+    public static SalesOrderItem Create(
+        Guid salesOrderId,
+        Guid masterProductId,
+        Guid productUnitId,
+        decimal conversionFactor,
+        decimal orderedQty,
+        decimal standardTierPrice,
+        decimal unitPrice,
+        bool priceOverridePending,
+        decimal unitCostSnapshot,
+        decimal vatAmount,
+        decimal lineTotal) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            SalesOrderId = salesOrderId,
+            MasterProductId = masterProductId,
+            ProductUnitId = productUnitId,
+            ConversionFactor = conversionFactor,
+            OrderedQty = orderedQty,
+            ApprovedQty = orderedQty,
+            StandardTierPrice = standardTierPrice,
+            UnitPrice = unitPrice,
+            PriceOverridePending = priceOverridePending,
+            UnitCostSnapshot = unitCostSnapshot,
+            VatAmount = vatAmount,
+            LineTotal = lineTotal
+        };
+
+    public void UpdateByManager(decimal approvedQty, decimal unitPrice, bool priceOverridePending, decimal vatAmount, decimal lineTotal)
+    {
+        ApprovedQty = approvedQty;
+        UnitPrice = unitPrice;
+        PriceOverridePending = priceOverridePending;
+        VatAmount = vatAmount;
+        LineTotal = lineTotal;
+    }
+
+    public void ApprovePriceOverride(Guid approverUserId)
+    {
+        PriceOverridePending = false;
+        PriceOverrideApprovedByUserId = approverUserId;
+    }
+
+    public void ConfirmShipped(decimal shippedQty) => ShippedQty = shippedQty;
 }

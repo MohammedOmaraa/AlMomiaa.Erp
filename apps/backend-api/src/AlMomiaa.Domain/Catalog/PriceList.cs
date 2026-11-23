@@ -13,4 +13,22 @@ public sealed class PriceList
     public DateTime EffectiveFromUtc { get; private set; }
     public DateTime? EffectiveToUtc { get; private set; }
     public ICollection<PriceListItem> Items { get; private init; } = new List<PriceListItem>();
+
+    public static PriceList Create(
+        string priceListCode,
+        string nameAr,
+        string? nameEn,
+        bool isDefault,
+        DateTime effectiveFromUtc,
+        DateTime? effectiveToUtc) =>
+        new()
+        {
+            PriceListCode = priceListCode.Trim().ToUpperInvariant(),
+            NameAr = nameAr.Trim(),
+            NameEn = string.IsNullOrWhiteSpace(nameEn) ? null : nameEn.Trim(),
+            IsDefault = isDefault,
+            IsActive = true,
+            EffectiveFromUtc = effectiveFromUtc,
+            EffectiveToUtc = effectiveToUtc
+        };
 }

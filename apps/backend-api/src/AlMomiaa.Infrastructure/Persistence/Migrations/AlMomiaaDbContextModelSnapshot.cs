@@ -1261,6 +1261,21 @@ namespace AlMomiaa.Infrastructure.Persistence.Migrations
                         new
                         {
                             RoleId = 1,
+                            PermissionClaim = "inventory:view"
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionClaim = "inventory:transfer"
+                        },
+                        new
+                        {
+                            RoleId = 1,
+                            PermissionClaim = "inventory:adjust"
+                        },
+                        new
+                        {
+                            RoleId = 1,
                             PermissionClaim = "audit:view"
                         },
                         new
@@ -1337,6 +1352,11 @@ namespace AlMomiaa.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 2,
                             PermissionClaim = "procurement:manage"
+                        },
+                        new
+                        {
+                            RoleId = 2,
+                            PermissionClaim = "inventory:view"
                         },
                         new
                         {
@@ -1590,6 +1610,21 @@ namespace AlMomiaa.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            RoleId = 6,
+                            PermissionClaim = "inventory:view"
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionClaim = "inventory:transfer"
+                        },
+                        new
+                        {
+                            RoleId = 6,
+                            PermissionClaim = "inventory:adjust"
+                        },
+                        new
+                        {
                             RoleId = 7,
                             PermissionClaim = "dashboards:inventory"
                         },
@@ -1612,6 +1647,16 @@ namespace AlMomiaa.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 7,
                             PermissionClaim = "procurement:receive"
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionClaim = "inventory:view"
+                        },
+                        new
+                        {
+                            RoleId = 7,
+                            PermissionClaim = "inventory:transfer"
                         });
                 });
 

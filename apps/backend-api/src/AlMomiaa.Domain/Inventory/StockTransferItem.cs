@@ -14,4 +14,16 @@ public sealed class StockTransferItem
     public decimal RequestedQty { get; private set; }
     public decimal DispatchedQty { get; private set; }
     public decimal? ReceivedQty { get; private set; }
+
+    public static StockTransferItem Create(Guid stockTransferId, Guid masterProductId, decimal requestedQty, decimal dispatchedQty) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            StockTransferId = stockTransferId,
+            MasterProductId = masterProductId,
+            RequestedQty = requestedQty,
+            DispatchedQty = dispatchedQty
+        };
+
+    public void SetReceivedQty(decimal receivedQty) => ReceivedQty = receivedQty;
 }

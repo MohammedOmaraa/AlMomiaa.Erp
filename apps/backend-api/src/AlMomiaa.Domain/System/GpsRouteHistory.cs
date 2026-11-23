@@ -14,4 +14,21 @@ public sealed class GpsRouteHistory
     public decimal? AccuracyMeters { get; private set; }
     public Guid? NearCustomerId { get; private set; }
     public DateTime RecordedAtUtc { get; private set; }
+
+    public static GpsRouteHistory Record(
+        Guid repId,
+        decimal latitude,
+        decimal longitude,
+        decimal? accuracyMeters,
+        Guid? nearCustomerId,
+        DateTime recordedAtUtc) =>
+        new()
+        {
+            RepId = repId,
+            Latitude = latitude,
+            Longitude = longitude,
+            AccuracyMeters = accuracyMeters,
+            NearCustomerId = nearCustomerId,
+            RecordedAtUtc = recordedAtUtc
+        };
 }

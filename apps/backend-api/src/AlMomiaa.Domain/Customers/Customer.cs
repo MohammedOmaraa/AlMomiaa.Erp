@@ -29,4 +29,45 @@ public sealed class Customer
     public decimal? Longitude { get; private set; }
     public bool IsActive { get; private set; } = true;
     public byte[] RowVersion { get; private set; } = Array.Empty<byte>();
+
+    public static Customer Create(
+        string customerCode,
+        string nameAr,
+        string? nameEn,
+        string phone,
+        string address,
+        string city,
+        string category,
+        string? vatNumber,
+        int gradeId,
+        int? priceListId,
+        int? customPaymentDays,
+        decimal creditLimit,
+        Guid assignedRepId,
+        decimal? latitude,
+        decimal? longitude) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            CustomerCode = customerCode.Trim().ToUpperInvariant(),
+            NameAr = nameAr.Trim(),
+            NameEn = string.IsNullOrWhiteSpace(nameEn) ? null : nameEn.Trim(),
+            Phone = phone.Trim(),
+            Address = address.Trim(),
+            City = string.IsNullOrWhiteSpace(city) ? "Riyadh" : city.Trim(),
+            Category = category.Trim(),
+            VatNumber = string.IsNullOrWhiteSpace(vatNumber) ? null : vatNumber.Trim(),
+            GradeId = gradeId,
+            PriceListId = priceListId,
+            CustomPaymentDays = customPaymentDays,
+            CreditLimit = creditLimit,
+            CurrentBalance = 0.00m,
+            AssignedRepId = assignedRepId,
+            Latitude = latitude,
+            Longitude = longitude,
+            IsActive = true
+        };
+
+    public void Debit(decimal amount) => CurrentBalance = Math.Round(CurrentBalance + amount, 2, MidpointRounding.AwayFromZero);
+    public void Credit(decimal amount) => CurrentBalance = Math.Round(CurrentBalance - amount, 2, MidpointRounding.AwayFromZero);
 }

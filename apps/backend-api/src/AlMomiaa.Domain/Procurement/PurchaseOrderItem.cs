@@ -15,4 +15,17 @@ public sealed class PurchaseOrderItem
     public decimal ReceivedQty { get; private set; }
     public decimal UnitCostSAR { get; private set; }
     public decimal LineTotalSAR { get; private set; }
+
+    public static PurchaseOrderItem Create(Guid purchaseOrderId, Guid masterProductId, decimal orderedQty, decimal unitCostSar) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            PurchaseOrderId = purchaseOrderId,
+            MasterProductId = masterProductId,
+            OrderedQty = orderedQty,
+            ReceivedQty = 0m,
+            UnitCostSAR = unitCostSar
+        };
+
+    public void AddReceived(decimal qty) => ReceivedQty += qty;
 }

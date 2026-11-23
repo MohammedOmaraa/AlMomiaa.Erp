@@ -17,4 +17,26 @@ public sealed class SupplierProduct
     public int? LeadTimeDays { get; private set; }
     public bool IsPreferredSupplier { get; private set; }
     public DateTime UpdatedAtUtc { get; private set; }
+
+    public static SupplierProduct Create(
+        Guid masterProductId,
+        Guid supplierId,
+        string? supplierSku,
+        string? supplierBarcode,
+        decimal lastPurchasePrice,
+        int? leadTimeDays,
+        bool isPreferredSupplier,
+        DateTime updatedAtUtc) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            MasterProductId = masterProductId,
+            SupplierId = supplierId,
+            SupplierSku = string.IsNullOrWhiteSpace(supplierSku) ? null : supplierSku.Trim(),
+            SupplierBarcode = string.IsNullOrWhiteSpace(supplierBarcode) ? null : supplierBarcode.Trim(),
+            LastPurchasePrice = lastPurchasePrice,
+            LeadTimeDays = leadTimeDays,
+            IsPreferredSupplier = isPreferredSupplier,
+            UpdatedAtUtc = updatedAtUtc
+        };
 }

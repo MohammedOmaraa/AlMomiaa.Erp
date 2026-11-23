@@ -14,4 +14,27 @@ public sealed class AuditLog
     public string? NewValuesJson { get; private set; }
     public string? IpAddress { get; private set; }
     public DateTime TimestampUtc { get; private set; }
+
+    public static AuditLog Append(
+        Guid userId,
+        string userRole,
+        string actionName,
+        string entityName,
+        string entityId,
+        string? oldValuesJson,
+        string? newValuesJson,
+        string? ipAddress,
+        DateTime timestampUtc) =>
+        new()
+        {
+            UserId = userId,
+            UserRole = userRole,
+            ActionName = actionName,
+            EntityName = entityName,
+            EntityId = entityId,
+            OldValuesJson = oldValuesJson,
+            NewValuesJson = newValuesJson,
+            IpAddress = ipAddress,
+            TimestampUtc = timestampUtc
+        };
 }

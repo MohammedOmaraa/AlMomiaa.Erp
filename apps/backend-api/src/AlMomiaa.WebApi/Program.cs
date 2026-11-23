@@ -1,15 +1,20 @@
 ﻿using System.Text;
 using AlMomiaa.Application;
 using AlMomiaa.Application.Authentication.Abstractions;
+using AlMomiaa.Application.Common.Abstractions;
+using AlMomiaa.Domain.Common;
 using AlMomiaa.Domain.Identity;
 using AlMomiaa.Infrastructure;
 using AlMomiaa.Infrastructure.Authentication;
+using AlMomiaa.Infrastructure.Persistence;
 using AlMomiaa.WebApi.Middleware;
 using AlMomiaa.WebApi.Security;
+using AlMomiaa.WebApi.Services;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -45,9 +50,11 @@ if (builder.Environment.IsProduction() && configuredOrigins.Length == 0)
 
 builder.Services.Configure<CorsSecurityOptions>(builder.Configuration.GetSection(CorsSecurityOptions.SectionName));
 builder.Services.AddSingleton<ITrustedOriginValidator, TrustedOriginValidator>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, HttpCurrentUserService>();
 
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
 
 builder.Services
     .AddControllers()
@@ -70,7 +77,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "AlMomiaa ERP API",
         Version = "v1",
-        Description = "AlMomiaa Enterprise ERP & DMS REST API"
+        Description = "AlMomiaa Enterprise ERP & DMS REST API (8 Core Modules, ZATCA Phase 2, Double-Entry Ledger)"
     });
 
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -81,6 +88,21 @@ builder.Services.AddSwaggerGen(options =>
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
         Description = "Short-lived (10-minute) Bearer JWT access token."
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
     });
 });
 
@@ -130,6 +152,16 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+if (app.Environment.IsDevelopment()
+    && !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ALMOMIAA_DEV_ADMIN_CODE")))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AlMomiaaDbContext>();
+    var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await DevelopmentAdminBootstrapper.EnsureDevAdminFromEnvironmentAsync(db, hasher, logger);
+}
+
 app.UseExceptionHandler(exceptionApp =>
 {
     exceptionApp.Run(async context =>
@@ -155,6 +187,76 @@ app.UseExceptionHandler(exceptionApp =>
                 Instance = context.Request.Path
             };
             await context.Response.WriteAsJsonAsync(problem);
+            return;
+        }
+
+        if (exception is ForbiddenDomainException forbiddenException)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new ProblemDetails
+            {
+                Status = StatusCodes.Status403Forbidden,
+                Title = "Access forbidden",
+                Detail = forbiddenException.Message,
+                Type = "https://api.almomiaa.sa/errors/forbidden",
+                Instance = context.Request.Path
+            });
+            return;
+        }
+
+        if (exception is NotFoundException notFoundException)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            await context.Response.WriteAsJsonAsync(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Resource not found",
+                Detail = notFoundException.Message,
+                Type = "https://api.almomiaa.sa/errors/not-found",
+                Instance = context.Request.Path
+            });
+            return;
+        }
+
+        if (exception is ConflictException conflictException)
+        {
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            await context.Response.WriteAsJsonAsync(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Resource conflict",
+                Detail = conflictException.Message,
+                Type = $"https://api.almomiaa.sa/errors/{conflictException.ErrorCode}",
+                Instance = context.Request.Path
+            });
+            return;
+        }
+
+        if (exception is DbUpdateConcurrencyException)
+        {
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            await context.Response.WriteAsJsonAsync(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Concurrency conflict",
+                Detail = "The record was modified by another operation. Reload the latest version and retry.",
+                Type = "https://api.almomiaa.sa/errors/concurrency-conflict",
+                Instance = context.Request.Path
+            });
+            return;
+        }
+
+        if (exception is BusinessRuleException ruleException)
+        {
+            context.Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
+            await context.Response.WriteAsJsonAsync(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "Business rule violation",
+                Detail = ruleException.Message,
+                Type = $"https://api.almomiaa.sa/errors/{ruleException.ErrorCode}",
+                Instance = context.Request.Path
+            });
             return;
         }
 

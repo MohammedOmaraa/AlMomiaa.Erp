@@ -16,4 +16,24 @@ public sealed class Warehouse
     public string? VehiclePlateNumber { get; private set; }
     public string City { get; private set; } = "Riyadh";
     public bool IsActive { get; private set; } = true;
+
+    public static Warehouse Create(
+        string warehouseCode,
+        string nameAr,
+        string? nameEn,
+        string warehouseType,
+        Guid? assignedRepId,
+        string? vehiclePlateNumber,
+        string city = "Riyadh") =>
+        new()
+        {
+            WarehouseCode = warehouseCode.Trim().ToUpperInvariant(),
+            NameAr = nameAr.Trim(),
+            NameEn = string.IsNullOrWhiteSpace(nameEn) ? null : nameEn.Trim(),
+            WarehouseType = warehouseType.Trim(),
+            AssignedRepId = assignedRepId,
+            VehiclePlateNumber = string.IsNullOrWhiteSpace(vehiclePlateNumber) ? null : vehiclePlateNumber.Trim(),
+            City = string.IsNullOrWhiteSpace(city) ? "Riyadh" : city.Trim(),
+            IsActive = true
+        };
 }

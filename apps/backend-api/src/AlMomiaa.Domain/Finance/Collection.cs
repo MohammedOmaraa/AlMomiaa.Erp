@@ -1,3 +1,4 @@
+using AlMomiaa.Domain.Common;
 using AlMomiaa.Domain.Customers;
 using AlMomiaa.Domain.Identity;
 
@@ -31,4 +32,85 @@ public sealed class Collection
     public DateTime CreatedAtUtc { get; private set; }
     public byte[] RowVersion { get; private set; } = Array.Empty<byte>();
     public ICollection<CollectionAllocation> Allocations { get; private init; } = new List<CollectionAllocation>();
+
+    public static Collection CreateCash(
+        string receiptNumber,
+        Guid customerId,
+        Guid repId,
+        decimal amount,
+        Guid repCustodyAccountId,
+        Guid idempotencyKey,
+        DateTime createdAtUtc) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            ReceiptNumber = receiptNumber.Trim().ToUpperInvariant(),
+            CustomerId = customerId,
+            RepId = repId,
+            PaymentMethod = "Cash",
+            Amount = Math.Round(amount, 2, MidpointRounding.AwayFromZero),
+            Status = "InRepCustody",
+            IsCustomerConfirmed = false,
+            TargetFinancialAccountId = repCustodyAccountId,
+            OriginalValueDateUtc = createdAtUtc,
+            IdempotencyKey = idempotencyKey,
+            CreatedAtUtc = createdAtUtc
+        };
+
+    public static Collection CreateBankTransfer(
+        string receiptNumber,
+        Guid customerId,
+        Guid repId,
+        decimal amount,
+        string bankReferenceNumber,
+        string paymentProofImageUrl,
+        string paymentProofImageHash,
+        DateTime originalValueDateUtc,
+        Guid idempotencyKey,
+        DateTime createdAtUtc) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            ReceiptNumber = receiptNumber.Trim().ToUpperInvariant(),
+            CustomerId = customerId,
+            RepId = repId,
+            PaymentMethod = "BankTransfer",
+            Amount = Math.Round(amount, 2, MidpointRounding.AwayFromZero),
+            Status = "PendingBankVerification",
+            IsCustomerConfirmed = false,
+            BankReferenceNumber = bankReferenceNumber.Trim(),
+            PaymentProofImageUrl = paymentProofImageUrl.Trim(),
+            PaymentProofImageHash = paymentProofImageHash.Trim().ToLowerInvariant(),
+            OriginalValueDateUtc = originalValueDateUtc,
+            IdempotencyKey = idempotencyKey,
+            CreatedAtUtc = createdAtUtc
+        };
+
+    public void ConfirmByCustomer(DateTime confirmedAtUtc)
+    {
+        IsCustomerConfirmed = true;
+        CustomerConfirmedAtUtc ??= confirmedAtUtc;
+    }
+
+    public void DepositToTreasury(Guid targetTreasuryAccountId, Guid accountantUserId, DateTime verifiedAtUtc)
+    {
+        if (PaymentMethod != "Cash" || Status != "InRepCustody")
+            throw new BusinessRuleException($"Only Cash collections InRepCustody can be handed over to Treasury (current: {PaymentMethod}/{Status}).");
+
+        Status = "DepositedToTreasury";
+        TargetFinancialAccountId = targetTreasuryAccountId;
+        VerifiedByAccountantId = accountantUserId;
+        VerifiedAtUtc = verifiedAtUtc;
+    }
+
+    public void VerifyBankTransfer(bool approve, Guid targetBankAccountId, Guid accountantUserId, DateTime verifiedAtUtc)
+    {
+        if (PaymentMethod != "BankTransfer" || Status != "PendingBankVerification")
+            throw new BusinessRuleException($"Only PendingBankVerification bank transfers can be verified (current: {PaymentMethod}/{Status}).");
+
+        Status = approve ? "VerifiedInBank" : "Rejected";
+        TargetFinancialAccountId = approve ? targetBankAccountId : null;
+        VerifiedByAccountantId = accountantUserId;
+        VerifiedAtUtc = verifiedAtUtc;
+    }
 }

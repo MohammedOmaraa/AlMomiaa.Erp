@@ -19,4 +19,11 @@ public sealed class CustomerGrade
             AllowCredit = allowCredit,
             UpdatedAtUtc = updatedAtUtc
         };
+
+    public void UpdatePolicy(int defaultPaymentDays, bool allowCredit, DateTime updatedAtUtc)
+    {
+        DefaultPaymentDays = defaultPaymentDays;
+        AllowCredit = allowCredit;
+        UpdatedAtUtc = updatedAtUtc;
+    }
 }

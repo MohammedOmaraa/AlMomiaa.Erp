@@ -1,7 +1,7 @@
 # 06 - API Specification & Real-Time SignalR Contracts
 **Project Name:** AlMomiaa Enterprise ERP & DMS  
 **Base URL:** `https://api.almomiaa.sa/api/v1`  
-**Version:** 3.1 (Synchronized with `05-Database.md` & `07-Security.md`)
+**Version:** 3.2 (Synchronized with `05-Database.md`, `07-Security.md`, and implemented `.NET 9` WebApi controllers)
 
 ---
 
@@ -25,7 +25,9 @@
 | `POST` | `/auth/logout` | Public (`[AllowAnonymous]`, cookie-authenticated, idempotent) | Validates trusted origin (`403` on untrusted origin), revokes the current refresh-session family when a valid cookie is present, always clears the `almomiaa_refresh` cookie (`Max-Age=0`), and returns `204 No Content`. |
 | `GET` | `/users` | `users:manage` | Paginated list of employees, roles, rep types, and assigned warehouses/vans. |
 | `POST` | `/users` | `users:manage` | Creates user and auto-initializes `RepCustodyWallet` (and optional `MobileVan` warehouse) if `SALES_REP`. |
-| `PUT` | `/roles/{roleId}/permissions` | `permissions:manage` | Updates role permission claims (`SUPER_ADMIN` only) and rotates Redis `SecurityStamp`. |
+| `PATCH` | `/users/{id}/status` | `users:manage` | Activates or deactivates an employee account and rotates `SecurityStamp` on deactivation. |
+| `GET` | `/roles` | `permissions:manage` | Lists all 7 canonical roles and their assigned permission claims. |
+| `PUT` | `/roles/{roleId}/permissions` | `permissions:manage` | Updates role permission claims (`SUPER_ADMIN` only) and rotates `SecurityStamp` for affected users. |
 
 #### Authentication Contracts (`/openapi/v1.json`, mirrored in `@almomiaa/api-client`)
 - **Login Request (`POST /api/v1/auth/login`):** `{ "identifier": "EMP-0001 | +9665XXXXXXXX", "password": "<secret>" }`
@@ -56,66 +58,74 @@
 | `GET` | `/customers` | `customers:view` | Paginated list (auto-scoped to `AssignedRepId` for `SALES_REP`). |
 | `GET` | `/customers/{id}/credit-status` | `customers:view` | **Order Step 2:** Returns `CurrentBalance`, `OverdueDebt`, `CreditLimit`, `Grade (A/B/C/D)`, `PriceListId`, `EffectivePaymentDays`, and last 10 purchases. |
 | `POST` | `/customers` | `customers:manage` | Creates customer with Grade, Price List, Credit Limit, Category, and Assigned Representative. |
+| `GET` | `/customers/grades` | `customers:view` | Lists customer credit grades (A, B, C, D) and default payment periods. |
 | `PUT` | `/customers/grades` | `settings:manage` | Updates configurable payment periods for Grades A, B, C, and D. |
 
 ### 2.3 Product Hierarchy, Price Lists & Multi-Supplier Catalog (`/api/v1/catalog`)
 | HTTP | Route | Permission Claim Required | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/catalog/categories/tree` | `catalog:view` | Returns hierarchical tree (`Beverages -> Pepsi -> ...`). |
-| `GET` | `/catalog/products` | `catalog:view` | High-performance paginated/virtualized Master Products list with SKU, Arabic/English names, SAR prices, and warehouse stock. |
-| `GET` | `/catalog/categories/{id}/products` | `catalog:view` | **Order Step 3:** Loads products under category with customer's resolved Price List price and real-time `AvailableQty`. |
-| `POST` | `/catalog/master-products` | `catalog:manage` | Creates `MasterProduct` and `ProductUnits` (including `MinAllowedSellingPrice`). |
-| `POST` | `/catalog/master-products/{id}/suppliers` | `catalog:manage` | Links a Supplier (`Supplier A` or `Supplier B`) to a single `MasterProduct`. |
+| `GET` / `POST` | `/catalog/categories` | `catalog:view` / `catalog:manage` | Gets hierarchical category tree or creates a category/subcategory. |
+| `GET` / `POST` | `/catalog/brands` | `catalog:view` / `catalog:manage` | Lists or creates product brands. |
+| `GET` / `POST` | `/catalog/products` | `catalog:view` / `catalog:manage` | Paginated Master Products list (cost masked for non-authorized roles) and multi-unit product creation. |
+| `GET` | `/catalog/categories/{categoryId}/products` | `catalog:view` | **Order Step 3:** Loads products under category with customer's resolved Price List price and real-time `AvailableQty`. |
+| `POST` | `/catalog/products/{id}/suppliers` | `catalog:manage` | Links a Supplier (`Supplier A` or `Supplier B`) to a single `MasterProduct`. |
 | `GET` / `POST` | `/catalog/price-lists` | `catalog:view` / `catalog:manage` | Manages dynamic tiered price lists (`Wholesale`, `Retail`, `KeyAccount`) (`MR-02`). |
 
 ### 2.4 Multi-Warehouse, Mobile Vans & Inventory (`/api/v1/warehouses`)
 | HTTP | Route | Permission Claim Required | Description |
 | :--- | :--- | :--- | :--- |
+| `GET` / `POST` | `/warehouses` | `inventory:view` / `settings:manage` | Lists warehouses (ABAC-scoped for `WH_KEEPER`) or creates a `MainWarehouse`, `BranchWarehouse`, or `MobileVan`. |
 | `GET` | `/warehouses/{id}/stocks` | `inventory:view` | Paginated `PhysicalQty`, `ReservedQty`, `IncomingQty`, and `AvailableQty` (supports `MainWarehouse`, `BranchWarehouse`, and `MobileVan`). |
 | `POST` | `/warehouses/transfers` | `inventory:transfer` | Creates an inter-warehouse or van-loading stock transfer (`Status = InTransit`). |
-| `POST` | `/warehouses/transfers/{id}/receive` | `inventory:transfer` | Confirms receipt of transferred stock at destination warehouse/van. |
-| `POST` | `/warehouses/{id}/inventory-counts` | `inventory:adjust` | Submits physical count adjustments and appends to `inv.StockMovements`. |
+| `PUT` | `/warehouses/transfers/{id}/receive` | `inventory:transfer` | Confirms receipt of transferred stock at destination warehouse/van. |
+| `POST` | `/warehouses/{id}/inventory-count` | `inventory:adjust` | Submits physical count adjustments and appends to `inv.StockMovements`. |
 
 ### 2.5 Purchasing & Container Tracking (`/api/v1/procurement`)
 | HTTP | Route | Permission Claim Required | Description |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/procurement/purchase-orders` | `procurement:manage` | Creates Supplier Purchase Order + items and increments `IncomingQty`. |
+| `GET` / `POST` | `/procurement/suppliers` | `procurement:manage` | Lists or creates local/international suppliers. |
+| `GET` / `POST` | `/procurement/purchase-orders` | `procurement:manage` | Lists or creates Supplier Purchase Orders + items and increments `IncomingQty`. |
 | `POST` | `/procurement/containers` | `procurement:manage` | Registers sea container (`ContainerNumber`, `ETA`, `FreightAndCustomsCostSAR`). |
 | `POST` | `/procurement/goods-receipts` | `procurement:receive` | Records GRN + items, distributes container landed cost, recalculates `WeightedAvgCost`, increments `PhysicalQty`. |
 
-### 2.6 Governed Sales Orders, Invoicing, Returns & Delivery POD (`/api/v1/orders`, `/api/v1/invoices`, `/api/v1/delivery`)
+### 2.6 Governed Sales Orders, Invoicing, Returns & Delivery POD (`/api/v1/orders`, `/api/v1/invoices`, `/api/v1/returns`, `/api/v1/delivery`)
 | HTTP | Route | Permission Claim Required | Description |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/orders` | `orders:create` | **Steps 4–5:** Submits order (`PendingApproval`), reserves stock with 24h TTL, evaluates Credit Hold (`MR-03`), Price Floor (`MR-02`), and Offline Shortage (`RISK-03`), locks Rep edits. *(Or issues instant CashVan invoice if `OrderChannel = CashVan` against Rep's `MobileVan`)*. |
+| `GET` | `/orders` | `customers:view` | Paginated sales orders list (ABAC-scoped for `SALES_REP` and `WH_KEEPER`). |
+| `POST` | `/orders` | `orders:create` | **Steps 4–5:** Submits order (`PendingApproval`), reserves stock with 24h TTL, evaluates Credit Hold (`MR-03`), Price Floor (`MR-02`), and Offline Shortage (`RISK-03`), locks Rep edits. |
 | `PUT` | `/orders/{id}/manager-edit` | **`orders:edit_submitted`** | **Exclusive to `SALES_MGR` & `SUPER_ADMIN`:** Edits items/quantities/prices after submission; reconciles `ReservedQty` delta and logs audit diff. |
 | `POST` | `/orders/{id}/override-price` | **`orders:override_price`** | Approves line-item price overrides below tier/`MinAllowedSellingPrice` (`MR-02`). |
-| `POST` | `/orders/{id}/coapprove-credit` | **`orders:coapprove_credit`** | **Accountant / Exec Mgr:** Co-approves an order flagged with `RequiresFinanceCoApproval` (`MR-03`). |
-| `POST` | `/orders/{id}/approve` | `orders:approve` | **Steps 6–7:** Approves order and pushes instant SignalR alert to `WH_KEEPER` and `PURCH_MGR`. |
-| `POST` | `/orders/{id}/reject` | `orders:approve` | Rejects order, releases `ReservedQty`, notifies `SALES_REP`. |
-| `POST` | `/orders/{id}/confirm-shipment` | `warehouse:ship` | **Steps 8–9 (`WH_KEEPER`):** Deducts `PhysicalQty`/`ReservedQty`, acquires `ZatcaDeviceSequences` lock, generates signed ZATCA Phase 2 `Invoice`, debits Customer Balance. |
-| `GET` | `/invoices/{id}/print` | `invoices:view` | Generates printable A4 / Thermal invoice PDF with ZATCA TLV QR code. |
-| `POST` | `/invoices/{id}/upload-copy` | `invoices:upload_copy` | Uploads photographed/scanned copy of signed customer invoice (POD). |
+| `POST` | `/orders/{id}/co-approve-credit` | **`orders:coapprove_credit`** | **Accountant / Exec Mgr:** Co-approves an order flagged with `RequiresFinanceCoApproval` (`MR-03`). |
+| `POST` | `/orders/{id}/approve` | `orders:approve` | **Steps 6–7:** Approves order and enqueues `OrderApproved` outbox alert to `WH_KEEPER` and `PURCH_MGR`. |
+| `POST` | `/orders/{id}/reject` | `orders:approve` | Rejects order, releases `ReservedQty`, enqueues `OrderRejected` alert. |
+| `POST` | `/orders/{id}/confirm-shipment` | `warehouse:ship` | **Steps 8–9 (`WH_KEEPER`):** Deducts `PhysicalQty`/`ReservedQty`, advances `ZatcaDeviceSequences` ICV/PIH, generates ZATCA Phase 2 `Invoice`, debits Customer Balance. |
+| `POST` | `/invoices/egs-devices` | `settings:manage` | Registers a ZATCA Phase 2 EGS device sequence counter (`ICV=0`, initial PIH). |
+| `GET` | `/invoices/{id}/print` | `invoices:view` | Returns printable invoice payload with ZATCA ICV, PIH, XML hash, and TLV Base64 QR code. |
+| `POST` | `/invoices/{id}/upload-copy` | `invoices:upload_copy` | Attaches photographed/scanned copy URL of signed customer invoice (POD). |
 | `POST` | `/returns` | `sales:returns` | Creates Sales Return + ZATCA Credit Note (`381`), optionally restocks sellable items, credits Customer Receivable. |
 | `POST` | `/delivery/dispatches` | `delivery:dispatch` | Creates Driver/Rep Delivery Manifest linking prepared invoices (`MR-04`). |
-| `PATCH` | `/delivery/dispatches/{id}/items/{invoiceId}` | `delivery:update_pod` | Updates delivery status (`OutForDelivery -> Delivered`) and attaches signed POD photo (`MR-04`). |
+| `PUT` | `/delivery/dispatches/{id}/items/{invoiceId}/pod` | `delivery:update_pod` | Updates delivery status (`OutForDelivery -> Delivered`) and attaches signed POD photo (`MR-04`). |
 
 ### 2.7 Collections, Treasury Reconciliation & Fiscal Periods (`/api/v1/collections`, `/api/v1/finance`)
 | HTTP | Route | Permission Claim Required | Description |
 | :--- | :--- | :--- | :--- |
+| `GET` / `POST` | `/finance/accounts` | `dashboards:finance` / `settings:manage` | Lists or creates financial accounts (`MainTreasurySafe`, `BankAccount`, `RepCustodyWallet`, etc.). |
+| `GET` / `POST` | `/finance/fiscal-periods` | `dashboards:finance` / `finance:close_period` | Lists or opens monthly fiscal periods for double-entry ledger postings. |
+| `POST` | `/finance/fiscal-periods/{id}/close` | `finance:close_period` | Locks a fiscal month (`IsClosed = true`) after VAT filing (`MR-05`). |
+| `GET` | `/finance/journal-entries` | `dashboards:finance` | Lists append-only balanced double-entry journal entries and their lines. |
 | `POST` | `/collections/cash` | `collections:create` | Records cash collection (`InRepCustody`), posts double-entry journal, updates Rep Custody Wallet & Customer Balance. |
-| `POST` | `/collections/{id}/customer-confirm` | Public (Signed OTP) / `collections:create` | Marks cash collection as `IsCustomerConfirmed = true`. |
-| `POST` | `/collections/treasury-handover` | `finance:confirm_treasury` | **Accountant:** Confirms Rep handed cash to HQ Treasury Safe; posts double-entry transfer & updates Executive Dashboard. |
+| `POST` | `/collections/{id}/confirm` | `collections:create` | Marks cash collection as `IsCustomerConfirmed = true`. |
+| `POST` | `/collections/handover` | `finance:confirm_treasury` | **Accountant:** Confirms Rep handed cash to HQ Treasury Safe; posts double-entry transfer & enqueues KPI update. |
 | `POST` | `/collections/bank-transfer` | `collections:create` | Uploads bank transfer proof image (SHA-256 deduplicated) + reference (`PendingBankVerification`). |
-| `POST` | `/collections/bank-transfer/{id}/verify` | `finance:verify_bank` | **Accountant:** Verifies bank transfer against open fiscal period; credits Customer Balance, increments Bank Balance, updates Executive Dashboard. |
-| `GET` / `POST` | `/finance/fiscal-periods/{id}/close` | `finance:close_period` | Locks a fiscal month (`IsClosed = true`) after VAT filing (`MR-05`). |
+| `POST` | `/collections/{id}/verify-bank` | `finance:verify_bank` | **Accountant:** Verifies bank transfer against open fiscal period preserving `OriginalValueDateUtc` (`MR-05`); credits Customer Balance & increments Bank Balance. |
 
 ### 2.8 Dashboards, Audit & GPS (`/api/v1/dashboards`, `/api/v1/audit-logs`, `/api/v1/gps`)
 | HTTP | Route | Permission Claim Required | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/dashboards/executive` | `dashboards:executive` | Redis-backed live KPIs (Safe Cash, Rep Custody Cash, Bank, Receivables, Payables, Inventory Value, Sales, Gross Profit). |
-| `GET` | `/dashboards/{roleView}` | Role dashboard claim | Endpoints for `sales`, `inventory`, `finance`, `warehouse`, and `rep` dashboards. |
+| `GET` | `/dashboards/executive` | `dashboards:executive` | Live executive KPIs (Safe Cash, Rep Custody Cash, Bank, Receivables, Payables, Inventory Value, Pending Orders, Low Stock). |
+| `GET` | `/dashboards/role/{roleView}` | Role dashboard claim | Endpoints for `sales`, `inventory`, `finance`, `warehouse`, and `rep` dashboards. |
 | `GET` | `/audit-logs` | `audit:view` | Keyset-paginated audit trail (`User`, `Action`, `Timestamp`, `OldValuesJson`, `NewValuesJson`). |
-| `POST` | `/gps/pings` | `gps:stream` | Feature-flagged batched background GPS telemetry endpoint. |
+| `POST` | `/gps/pings` | `gps:stream` | Batched field sales rep GPS telemetry endpoint. |
 
 ---
 

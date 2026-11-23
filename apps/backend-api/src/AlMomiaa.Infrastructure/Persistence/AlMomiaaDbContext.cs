@@ -80,12 +80,26 @@ public sealed class AlMomiaaDbContext(DbContextOptions<AlMomiaaDbContext> option
 
         if (Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true)
         {
+            // SQLite requires single-column INTEGER PRIMARY KEY for AUTOINCREMENT on partitioned log/ledger tables.
+            modelBuilder.Entity<AuditLog>().HasKey(x => x.Id);
+            modelBuilder.Entity<GpsRouteHistory>().HasKey(x => x.Id);
+            modelBuilder.Entity<StockMovement>().HasKey(x => x.Id);
+            modelBuilder.Entity<JournalLine>().HasKey(x => x.Id);
+
             foreach (var entityType in modelBuilder.Model.GetEntityTypes())
             {
                 var rowVersion = entityType.FindProperty("RowVersion");
                 if (rowVersion is not null)
                 {
                     rowVersion.SetDefaultValueSql("randomblob(8)");
+                }
+
+                foreach (var property in entityType.GetProperties())
+                {
+                    if (string.Equals(property.GetDefaultValueSql(), "SYSUTCDATETIME()", StringComparison.OrdinalIgnoreCase))
+                    {
+                        property.SetDefaultValueSql("CURRENT_TIMESTAMP");
+                    }
                 }
             }
         }

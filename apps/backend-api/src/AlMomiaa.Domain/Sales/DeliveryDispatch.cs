@@ -22,4 +22,38 @@ public sealed class DeliveryDispatch
     public DateTime CreatedAtUtc { get; private set; }
     public byte[] RowVersion { get; private set; } = Array.Empty<byte>();
     public ICollection<DeliveryDispatchItem> Items { get; private init; } = new List<DeliveryDispatchItem>();
+
+    public static DeliveryDispatch Create(
+        string dispatchNumber,
+        int warehouseId,
+        Guid driverOrRepId,
+        string? vehiclePlateNumber,
+        Guid createdByUserId,
+        DateTime createdAtUtc) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            DispatchNumber = dispatchNumber.Trim().ToUpperInvariant(),
+            WarehouseId = warehouseId,
+            DriverOrRepId = driverOrRepId,
+            VehiclePlateNumber = string.IsNullOrWhiteSpace(vehiclePlateNumber) ? null : vehiclePlateNumber.Trim(),
+            Status = "PreparedAtWarehouse",
+            CreatedByUserId = createdByUserId,
+            CreatedAtUtc = createdAtUtc
+        };
+
+    public void RefreshStatus(DateTime utcNow)
+    {
+        if (Items.Count > 0 && Items.All(i => i.DeliveryStatus == "Delivered"))
+        {
+            Status = "Completed";
+            CompletedAtUtc ??= utcNow;
+            DispatchedAtUtc ??= utcNow;
+        }
+        else if (Items.Any(i => i.DeliveryStatus is "OutForDelivery" or "Delivered"))
+        {
+            Status = "OutForDelivery";
+            DispatchedAtUtc ??= utcNow;
+        }
+    }
 }

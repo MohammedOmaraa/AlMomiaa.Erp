@@ -18,4 +18,26 @@ public sealed class SalesReturnItem
     public decimal UnitPrice { get; private set; }
     public decimal VatAmount { get; private set; }
     public decimal LineTotal { get; private set; }
+
+    public static SalesReturnItem Create(
+        Guid salesReturnId,
+        Guid masterProductId,
+        Guid productUnitId,
+        decimal returnedQty,
+        bool isSellableRestock,
+        decimal unitPrice,
+        decimal vatAmount,
+        decimal lineTotal) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            SalesReturnId = salesReturnId,
+            MasterProductId = masterProductId,
+            ProductUnitId = productUnitId,
+            ReturnedQty = returnedQty,
+            IsSellableRestock = isSellableRestock,
+            UnitPrice = unitPrice,
+            VatAmount = vatAmount,
+            LineTotal = lineTotal
+        };
 }

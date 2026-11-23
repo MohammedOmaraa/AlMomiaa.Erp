@@ -88,4 +88,10 @@ public sealed class User
             Warehouses.Add(UserWarehouse.Create(Id, warehouseId));
         }
     }
+
+    public void SetDefaultWarehouse(int warehouseId)
+    {
+        DefaultWarehouseId = warehouseId;
+        AssignWarehouse(warehouseId);
+    }
 }

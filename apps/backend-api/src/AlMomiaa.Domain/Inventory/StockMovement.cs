@@ -21,4 +21,33 @@ public sealed class StockMovement
     public DateOnly? ExpiryDate { get; private set; }
     public Guid CreatedByUserId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+
+    public static StockMovement Append(
+        int warehouseId,
+        Guid masterProductId,
+        string movementType,
+        decimal quantityDelta,
+        decimal physicalBalanceAfter,
+        decimal unitCost,
+        string referenceType,
+        Guid referenceId,
+        Guid createdByUserId,
+        DateTime createdAtUtc,
+        string? lotNumber = null,
+        DateOnly? expiryDate = null) =>
+        new()
+        {
+            WarehouseId = warehouseId,
+            MasterProductId = masterProductId,
+            MovementType = movementType,
+            QuantityDelta = quantityDelta,
+            PhysicalBalanceAfter = physicalBalanceAfter,
+            UnitCost = unitCost,
+            ReferenceType = referenceType,
+            ReferenceId = referenceId,
+            LotNumber = string.IsNullOrWhiteSpace(lotNumber) ? null : lotNumber.Trim(),
+            ExpiryDate = expiryDate,
+            CreatedByUserId = createdByUserId,
+            CreatedAtUtc = createdAtUtc
+        };
 }

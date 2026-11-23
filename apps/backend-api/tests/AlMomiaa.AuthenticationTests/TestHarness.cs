@@ -95,7 +95,7 @@ public sealed class AuthWebApplicationFactory : WebApplicationFactory<Program>
 
     public InMemorySecurityStampStore StampStore { get; } = new();
     public InMemoryLoginAttemptLimiter AttemptLimiter { get; } = new();
-    public MutableTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 11, 23, 8, 0, 0, TimeSpan.Zero));
+    public MutableTimeProvider Clock { get; } = new(DateTimeOffset.UtcNow);
 
     public AuthWebApplicationFactory()
     {

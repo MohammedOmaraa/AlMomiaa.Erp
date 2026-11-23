@@ -11,4 +11,14 @@ public sealed class OutboxMessage
     public DateTime? ProcessedAtUtc { get; private set; }
     public int RetryCount { get; private set; }
     public string? LastError { get; private set; }
+
+    public static OutboxMessage Enqueue(string messageType, string payloadJson, DateTime createdAtUtc) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            MessageType = messageType,
+            PayloadJson = payloadJson,
+            CreatedAtUtc = createdAtUtc,
+            RetryCount = 0
+        };
 }

@@ -1,7 +1,9 @@
 ﻿using AlMomiaa.Application.Authentication.Abstractions;
+using AlMomiaa.Application.Common.Abstractions;
 using AlMomiaa.Application.Common.Behaviors;
 using AlMomiaa.Infrastructure.Authentication;
 using AlMomiaa.Infrastructure.Persistence;
+using AlMomiaa.Infrastructure.Persistence.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,7 +15,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        bool isDevelopment = false)
     {
         services.AddDbContext<AlMomiaaDbContext>(options =>
             options.UseSqlServer(
@@ -26,23 +29,41 @@ public static class DependencyInjection
         services.AddSingleton(TimeProvider.System);
 
         var redisConnectionString = configuration.GetValue<string>("Redis:ConnectionString");
-        services.AddSingleton<IConnectionMultiplexer>(_ =>
+        if (isDevelopment && string.IsNullOrWhiteSpace(redisConnectionString))
         {
-            if (string.IsNullOrWhiteSpace(redisConnectionString))
+            services.AddSingleton<ISecurityStampStore, InMemoryDevSecurityStampStore>();
+            services.AddSingleton<ILoginAttemptLimiter, InMemoryDevLoginAttemptLimiter>();
+        }
+        else
+        {
+            services.AddSingleton<IConnectionMultiplexer>(_ =>
             {
-                throw new InvalidOperationException("Redis:ConnectionString configuration is required.");
-            }
+                if (string.IsNullOrWhiteSpace(redisConnectionString))
+                {
+                    throw new InvalidOperationException("Redis:ConnectionString configuration is required in non-Development environments.");
+                }
 
-            var redisOptions = ConfigurationOptions.Parse(redisConnectionString);
-            redisOptions.AbortOnConnectFail = false;
-            return ConnectionMultiplexer.Connect(redisOptions);
-        });
+                var redisOptions = ConfigurationOptions.Parse(redisConnectionString);
+                redisOptions.AbortOnConnectFail = false;
+                return ConnectionMultiplexer.Connect(redisOptions);
+            });
+
+            services.AddSingleton<ISecurityStampStore, RedisSecurityStampStore>();
+            services.AddSingleton<ILoginAttemptLimiter, LoginAttemptLimiter>();
+        }
 
         services.AddScoped<IAuthenticationService, AuthenticationService>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
-        services.AddSingleton<ISecurityStampStore, RedisSecurityStampStore>();
-        services.AddSingleton<ILoginAttemptLimiter, LoginAttemptLimiter>();
+
+        services.AddScoped<IIamModuleService, IamModuleService>();
+        services.AddScoped<ICustomersModuleService, CustomersModuleService>();
+        services.AddScoped<ICatalogModuleService, CatalogModuleService>();
+        services.AddScoped<IInventoryModuleService, InventoryModuleService>();
+        services.AddScoped<IProcurementModuleService, ProcurementModuleService>();
+        services.AddScoped<ISalesModuleService, SalesModuleService>();
+        services.AddScoped<IFinanceModuleService, FinanceModuleService>();
+        services.AddScoped<IOperationsModuleService, OperationsModuleService>();
 
         services.AddScoped<IIdempotencyStore, PassthroughIdempotencyStore>();
         services.AddScoped<IRequestPermissionChecker, DefaultPermissionChecker>();

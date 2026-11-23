@@ -15,4 +15,22 @@ public sealed class GoodsReceiptItem
     public decimal AllocatedLandedUnitCostSAR { get; private set; }
     public string? LotNumber { get; private set; }
     public DateOnly? ExpiryDate { get; private set; }
+
+    public static GoodsReceiptItem Create(
+        Guid goodsReceiptId,
+        Guid masterProductId,
+        decimal receivedQty,
+        decimal allocatedLandedUnitCostSar,
+        string? lotNumber,
+        DateOnly? expiryDate) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            GoodsReceiptId = goodsReceiptId,
+            MasterProductId = masterProductId,
+            ReceivedQty = receivedQty,
+            AllocatedLandedUnitCostSAR = allocatedLandedUnitCostSar,
+            LotNumber = string.IsNullOrWhiteSpace(lotNumber) ? null : lotNumber.Trim(),
+            ExpiryDate = expiryDate
+        };
 }

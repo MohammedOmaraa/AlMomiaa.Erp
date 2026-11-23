@@ -1,3 +1,4 @@
+using AlMomiaa.Domain.Common;
 using AlMomiaa.Domain.Customers;
 
 namespace AlMomiaa.Domain.Sales;
@@ -32,4 +33,56 @@ public sealed class Invoice
     public string ZatcaSubmissionStatus { get; private set; } = "Pending";
     public string? ZatcaXmlStorageUrl { get; private set; }
     public byte[] RowVersion { get; private set; } = Array.Empty<byte>();
+
+    public static Invoice Create(
+        string invoiceNumber,
+        Guid salesOrderId,
+        Guid customerId,
+        string invoiceType,
+        DateTime issueDateUtc,
+        DateTime dueDateUtc,
+        decimal subTotal,
+        decimal vatAmount,
+        decimal totalAmount,
+        string egsDeviceId,
+        long zatcaIcv,
+        Guid zatcaUuid,
+        string zatcaPreviousInvoiceHash,
+        string zatcaXmlHash,
+        string zatcaQrCodeBase64) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            InvoiceNumber = invoiceNumber.Trim().ToUpperInvariant(),
+            SalesOrderId = salesOrderId,
+            CustomerId = customerId,
+            InvoiceType = invoiceType,
+            IssueDateUtc = issueDateUtc,
+            DueDateUtc = dueDateUtc,
+            SubTotal = subTotal,
+            VatAmount = vatAmount,
+            TotalAmount = totalAmount,
+            PaidAmount = 0.00m,
+            PaymentStatus = "Unpaid",
+            EgsDeviceId = egsDeviceId,
+            ZatcaIcv = zatcaIcv,
+            ZatcaUuid = zatcaUuid,
+            ZatcaPreviousInvoiceHash = zatcaPreviousInvoiceHash,
+            ZatcaXmlHash = zatcaXmlHash,
+            ZatcaQrCodeBase64 = zatcaQrCodeBase64,
+            ZatcaSubmissionStatus = "Pending"
+        };
+
+    public void AttachCopyUrl(string url) => UploadedInvoiceCopyUrl = url.Trim();
+
+    public void ApplyPayment(decimal amount)
+    {
+        if (amount <= 0) throw new BusinessRuleException("Allocated payment amount must be positive.");
+        var remaining = TotalAmount - PaidAmount;
+        if (amount > remaining)
+            throw new BusinessRuleException($"Allocated amount ({amount}) exceeds invoice remaining balance ({remaining}).");
+
+        PaidAmount = Math.Round(PaidAmount + amount, 2, MidpointRounding.AwayFromZero);
+        PaymentStatus = PaidAmount >= TotalAmount ? "Paid" : "PartiallyPaid";
+    }
 }

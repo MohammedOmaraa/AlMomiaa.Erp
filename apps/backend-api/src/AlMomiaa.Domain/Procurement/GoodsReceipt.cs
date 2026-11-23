@@ -19,4 +19,22 @@ public sealed class GoodsReceipt
     public User ReceivedByUser { get; private init; } = null!;
     public DateTime ReceivedAtUtc { get; private set; }
     public ICollection<GoodsReceiptItem> Items { get; private init; } = new List<GoodsReceiptItem>();
+
+    public static GoodsReceipt Create(
+        string grnNumber,
+        Guid purchaseOrderId,
+        Guid? containerId,
+        int warehouseId,
+        Guid receivedByUserId,
+        DateTime receivedAtUtc) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            GrnNumber = grnNumber.Trim().ToUpperInvariant(),
+            PurchaseOrderId = purchaseOrderId,
+            ContainerId = containerId,
+            WarehouseId = warehouseId,
+            ReceivedByUserId = receivedByUserId,
+            ReceivedAtUtc = receivedAtUtc
+        };
 }
