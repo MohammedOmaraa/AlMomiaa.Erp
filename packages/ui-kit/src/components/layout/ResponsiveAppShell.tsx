@@ -22,6 +22,7 @@ export type ResponsiveAppShellProps = {
   onRetry?: () => void;
   initialCompact?: boolean;
   initialDrawerOpen?: boolean;
+  sidebarFooter?: ReactNode;
 };
 
 export function ResponsiveAppShell({
@@ -39,6 +40,7 @@ export function ResponsiveAppShell({
   onRetry,
   initialCompact = true,
   initialDrawerOpen = false,
+  sidebarFooter,
 }: ResponsiveAppShellProps) {
   const [compact, setCompact] = useState(initialCompact);
   const [drawerOpen, setDrawerOpen] = useState(initialDrawerOpen);
@@ -193,6 +195,7 @@ export function ResponsiveAppShell({
           brandLabel={brandLabel}
           compact={isCompactRail}
           headerAction={sidebarHeaderAction}
+          footer={sidebarFooter}
           onNavigate={handleNavigate}
         />
       </aside>

@@ -118,6 +118,22 @@ CREATE TABLE [id].[UserWarehouses] (
     WarehouseId INT NOT NULL,                                -- Scopes WH_KEEPER / CashVan ABAC filter
     CONSTRAINT PK_UserWarehouses PRIMARY KEY (UserId, WarehouseId)
 );
+
+CREATE TABLE [id].[RefreshTokenSessions] (
+    Id UNIQUEIDENTIFIER PRIMARY KEY,                         -- UUIDv7
+    UserId UNIQUEIDENTIFIER NOT NULL REFERENCES [id].[Users](Id) ON DELETE CASCADE,
+    FamilyId UNIQUEIDENTIFIER NOT NULL,                      -- Session rotation family identifier
+    TokenHash VARCHAR(64) NOT NULL,                          -- Lowercase SHA-256 hex hash of opaque refresh token
+    IssuedAtUtc DATETIME2 NOT NULL,
+    ExpiresAtUtc DATETIME2 NOT NULL,                         -- Enforced <= IssuedAtUtc + 14 days
+    RevokedAtUtc DATETIME2 NULL,
+    ReplacedBySessionId UNIQUEIDENTIFIER NULL,               -- Rotation chain link
+    RevocationReason NVARCHAR(100) NULL,
+    RowVersion ROWVERSION NOT NULL,                          -- Optimistic concurrency for atomic rotation/revocation
+    CONSTRAINT UX_RefreshTokenSessions_TokenHash UNIQUE (TokenHash),
+    INDEX IX_RefreshTokenSessions_FamilyId (FamilyId),
+    INDEX IX_RefreshTokenSessions_User_Active (UserId, RevokedAtUtc, ExpiresAtUtc)
+);
 ```
 
 ### 2.3 Product Catalog, Price Lists & Multi-Supplier Schema (`[cat]`)

@@ -46,12 +46,27 @@ Seeded into `[id].[Roles]` and `[id].[RolePermissions]` and enforced identically
 
 ## 2. Authentication & Session Security Controls
 
-1. **Short-Lived JWT + Device-Bound Refresh Token:**
-   - Access tokens expire every **10 minutes** and carry `UserId`, `RoleCodes`, `RepType`, `DefaultWarehouseId`, `AssignedWarehouseIds`, and `SecurityStamp`.
-   - Refresh tokens (14 days) rotate on every refresh and are stored in `HttpOnly`, `Secure`, `SameSite=Strict` cookies (`web-erp`) or device-bound encrypted storage (`rep-pwa`).
-2. **Instant Revocation via Redis `SecurityStamp`:**
-   - `SecurityStampMiddleware` performs an `O(1)` lookup against Redis key `user:stamp:{userId}`.
-   - Deactivating a user or modifying role permissions in the Super Admin dashboard rotates the stamp immediately, invalidating all active Web and offline-reconnecting PWA sessions.
+1. **Password Hashing & Anti-Enumeration:**
+   - Passwords are hashed using ASP.NET Core Identity `PasswordHasher` (PBKDF2-HMAC-SHA512 with random per-user salt); plaintext passwords are never stored or logged.
+   - Unknown identifier, wrong password, and inactive accounts return the exact same generic RFC 7807 `401 Unauthorized` `ProblemDetails` response, with constant-work verification padding on missing users.
+2. **Bounded Login Throttling:**
+   - Redis-backed sliding/window rate limiting (`Auth:LoginRateLimit`) blocks excessive failed attempts with `429 Too Many Requests` (default: 5 failed attempts per `clientIp + normalizedIdentifier` and 20 per `normalizedIdentifier` within a 15-minute TTL window, avoiding permanent lockout DoS). Successful login resets the client+identifier counter.
+3. **Short-Lived JWT & In-Memory Frontend Storage:**
+   - Access JWTs expire every **10 minutes** (`expiresIn: 600`) and carry `UserId`, `EmployeeCode`, `RoleCodes`, `RepType`, `DefaultWarehouseId`, `AssignedWarehouseIds`, `SecurityStamp`, and effective `permission` claims derived exclusively from assigned database roles.
+   - JWT `Issuer`, `Audience`, and `SigningKey` (>= 32 UTF-8 bytes) are required from environment/configuration; startup fails safely when missing and no default signing secret is committed.
+   - In `apps/web-erp`, access tokens are stored **only in memory** inside `@almomiaa/api-client` (`createAccessTokenStore`) — never in `localStorage`, `sessionStorage`, IndexedDB, URLs, or logs.
+4. **Rotating Opaque Refresh Cookie & Replay Detection (`[id].[RefreshTokenSessions]`):**
+   - Opaque 384-bit cryptographically random refresh tokens are stored server-side only as SHA-256 hex hashes (`TokenHash`, compared in constant time with `CryptographicOperations.FixedTimeEquals`) under a session `FamilyId` with `ROWVERSION` optimistic concurrency and a strict **14-day maximum lifetime**.
+   - Web refresh cookie `almomiaa_refresh` is always host-only (no `Domain`), `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api/v1/auth`, and is cleared (`Max-Age=0`) on logout and on invalid/expired/replayed refresh attempts.
+   - Every successful `/api/v1/auth/refresh` atomically rotates the session (`ReplacedBySessionId`). Reusing any already-rotated or revoked token immediately revokes the entire `FamilyId`.
+5. **Instant Revocation & Fail-Closed Redis `SecurityStamp` Validation:**
+   - `SecurityStampMiddleware` performs an `O(1)` lookup against Redis key `user:stamp:{userId}` on authenticated requests.
+   - Deactivating a user or rotating permissions invalidates/updates the stamp immediately, rejecting both active access JWTs (`401`) and refresh attempts (`401`).
+   - If Redis is unavailable, protected requests and refresh validation **fail closed** with RFC 7807 `503 Service Unavailable`.
+6. **Strict Credentialed CORS & Cross-Site Origin Protection:**
+   - Credentialed CORS (`AllowCredentials`) accepts only explicitly configured origins from `Cors:AllowedOrigins` (wildcard `*` is rejected at startup; empty origins are rejected in Production).
+   - Cookie-authenticated endpoints (`/api/v1/auth/refresh` and `/api/v1/auth/logout`) validate request `Origin`/`Referer` and `Sec-Fetch-Site` headers against trusted origins and reject cross-site requests with `403 Forbidden`.
+   - Frontend route guards (redirecting unauthenticated visitors to `/login`) are UX-only; every protected API endpoint enforces server-side policies.
 
 ---
 

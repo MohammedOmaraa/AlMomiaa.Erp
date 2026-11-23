@@ -20,11 +20,35 @@
 ### 2.1 Identity & User Management (`/api/v1/auth`, `/api/v1/users`, `/api/v1/roles`)
 | HTTP | Route | Permission Claim Required | Description |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/auth/login` | Public | Returns JWT Access Token (10m) + Refresh Token + Roles, Permissions & Assigned Warehouses. |
-| `POST` | `/auth/refresh` | Public | Rotates refresh token and issues new JWT. |
+| `POST` | `/auth/login` | Public (`[AllowAnonymous]`) | Authenticates by employee code or phone (`{ identifier, password }`). Returns 10-minute Bearer JWT (`expiresIn: 600`) + authenticated user context (`roleCodes`, `permissions`, `repType`, `defaultWarehouseId`, `assignedWarehouseIds`) and sets an `HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` host-only refresh cookie (14-day max). Returns generic `401` ProblemDetails on invalid credentials/inactive account, `429` when throttled, `400` on validation errors. |
+| `POST` | `/auth/refresh` | Public (`[AllowAnonymous]`, cookie-authenticated) | Empty request body. Validates trusted origin (`403` on cross-site untrusted origin), atomically rotates the `almomiaa_refresh` cookie, revokes the entire session family on replay/expiry/stamp mismatch, and returns the same `AuthenticationResponse` JSON as login. Clears cookie and returns `401` ProblemDetails on invalid session (`503` if Redis security-stamp store is unavailable). |
+| `POST` | `/auth/logout` | Public (`[AllowAnonymous]`, cookie-authenticated, idempotent) | Validates trusted origin (`403` on untrusted origin), revokes the current refresh-session family when a valid cookie is present, always clears the `almomiaa_refresh` cookie (`Max-Age=0`), and returns `204 No Content`. |
 | `GET` | `/users` | `users:manage` | Paginated list of employees, roles, rep types, and assigned warehouses/vans. |
 | `POST` | `/users` | `users:manage` | Creates user and auto-initializes `RepCustodyWallet` (and optional `MobileVan` warehouse) if `SALES_REP`. |
 | `PUT` | `/roles/{roleId}/permissions` | `permissions:manage` | Updates role permission claims (`SUPER_ADMIN` only) and rotates Redis `SecurityStamp`. |
+
+#### Authentication Contracts (`/openapi/v1.json`, mirrored in `@almomiaa/api-client`)
+- **Login Request (`POST /api/v1/auth/login`):** `{ "identifier": "EMP-0001 | +9665XXXXXXXX", "password": "<secret>" }`
+- **Authentication Response (`200 OK` on `/auth/login` and `/auth/refresh`):**
+  ```json
+  {
+    "accessToken": "<10m-jwt>",
+    "tokenType": "Bearer",
+    "expiresIn": 600,
+    "user": {
+      "id": "01933c90-9999-7000-8000-abcdef123456",
+      "employeeCode": "EMP-0001",
+      "fullNameAr": "اسم المستخدم",
+      "fullNameEn": "User Name",
+      "roleCodes": ["SALES_MGR"],
+      "permissions": ["orders:approve"],
+      "repType": null,
+      "defaultWarehouseId": null,
+      "assignedWarehouseIds": []
+    }
+  }
+  ```
+- **Refresh Cookie (`Set-Cookie`):** `almomiaa_refresh=<opaque-token>; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth; Expires=<utc-max-14d>` (host-only, no `Domain` attribute; refresh tokens are never included in JSON responses or client-side storage).
 
 ### 2.2 Customer & Credit Grades (`/api/v1/customers`)
 | HTTP | Route | Permission Claim Required | Description |

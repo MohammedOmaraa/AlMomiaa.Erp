@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { ResponsiveAppShell, SummaryCard, SurfaceCard } from "@almomiaa/ui";
+import { useRouter } from "next/navigation";
+import { Button, ResponsiveAppShell, SummaryCard, SurfaceCard } from "@almomiaa/ui";
 import type { SidebarNavItemProps, Theme } from "@almomiaa/ui";
 import { useTheme } from "next-themes";
 import { ar } from "../locales/ar";
 import { en } from "../locales/en";
+import { useAuth } from "../providers/AuthProvider";
 import { useLocale } from "../providers/LocaleProvider";
 
 function NavIcon({ paths }: { paths: string[] }) {
@@ -40,17 +42,48 @@ const navIcons: Record<string, ReactNode> = {
 };
 
 export default function HomePage() {
+  const router = useRouter();
   const { locale, setLocale } = useLocale();
   const { resolvedTheme, setTheme } = useTheme();
+  const { status, user, logout } = useAuth();
   const [mounted, setMounted] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login");
+    }
+  }, [status, router]);
+
   const t = locale === "ar-SA" ? ar : en;
   const theme: Theme = mounted && resolvedTheme === "dark" ? "dark" : "light";
   const onThemeChange = (nextTheme: Theme) => setTheme(nextTheme);
+
+  if (status !== "authenticated" || !user) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-surface-canvas p-6 text-text-primary">
+        <div role="status" className="w-full max-w-sm rounded-xl border border-surface-border bg-surface-card p-6 text-center">
+          <div className="mx-auto mb-3 h-4 w-3/4 animate-pulse rounded bg-surface-skeleton" />
+          <p className="text-sm text-text-secondary">{t.auth.checkingSession}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const displayName = locale === "ar-SA" ? user.fullNameAr : (user.fullNameEn ?? user.fullNameAr);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      setLoggingOut(false);
+    }
+  };
 
   const items: Array<SidebarNavItemProps & { id: string }> = [
     { id: "dashboard", label: t.dashboard, href: "/", active: true, icon: navIcons.dashboard },
@@ -63,6 +96,25 @@ export default function HomePage() {
     { id: "settings", label: t.settings, placeholder: true, placeholderLabel: t.soon, icon: navIcons.settings },
   ];
 
+  const sidebarFooter = (
+    <div className="space-y-2">
+      <div className="truncate px-1 text-start">
+        <p className="truncate text-xs text-text-inverse-muted">{t.auth.signedInAs}</p>
+        <p className="truncate text-sm font-semibold text-text-inverse">{displayName}</p>
+        <p className="truncate font-mono text-xs text-brand-gold">{user.employeeCode}</p>
+      </div>
+      <Button
+        variant="secondary"
+        size="compact"
+        loading={loggingOut}
+        onClick={handleLogout}
+        className="w-full"
+      >
+        {loggingOut ? t.auth.loggingOut : t.auth.logout}
+      </Button>
+    </div>
+  );
+
   return (
     <ResponsiveAppShell
       items={items}
@@ -72,6 +124,7 @@ export default function HomePage() {
       theme={theme}
       onLocaleChange={setLocale}
       onThemeChange={onThemeChange}
+      sidebarFooter={sidebarFooter}
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         <SurfaceCard>
@@ -79,7 +132,9 @@ export default function HomePage() {
           <h2 className="mt-2 text-start text-2xl font-bold text-text-primary sm:text-3xl">
             {t.welcome}
           </h2>
-          <p className="mt-2 text-start text-sm text-text-secondary">{t.illustrative}</p>
+          <p className="mt-2 text-start text-sm text-text-secondary">
+            {displayName} ({user.employeeCode}) — {t.illustrative}
+          </p>
         </SurfaceCard>
 
         <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3">

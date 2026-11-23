@@ -1,166 +1,286 @@
-# PROMPT-0002: Build Responsive Bilingual AlMomiaa ERP UI Shell
+# PROMPT-0003: Implement User Authentication, Session Persistence, and Login UI
 
-- **Status:** `COMPLETED (Archived as 0002-responsive-bilingual-erp-ui-shell.md)`
-- **Prompt ID:** `PROMPT-0002`
-- **Scope:** Root pnpm/Turborepo workspace wiring, `packages/ui-kit`, `apps/design-system-studio`, and `apps/web-erp`
-- **Reference baseline:** Architecture v3.1 (`docs/architecture/00-ADR-Architecture-Decisions.md`)
-- **User-supplied brand asset:** `C:\Users\Mohamed Omara\AppData\Roaming\Code\agentSessionData\d7a2c0c0-a7f9-4155-adb5-299d51a77582\attachments\d6be2f1a-40e9-4fd1-9660-bf707a95cf28\logo.jpg`
+- **Status:** `COMPLETED (Archived as 0003-user-authentication-and-login.md)`
+- **Prompt ID:** `PROMPT-0003`
+- **Scope:** `apps/backend-api`, `packages/api-client`, `packages/ui-kit` (auth form controls and stories), `apps/web-erp`, and synchronized auth documentation
+- **Reference baseline:** Architecture v3.1; `PROMPT-0001` and `PROMPT-0002` completed
+- **Confirmed decisions:** Login + refresh + logout; login by phone or employee code; no public registration; map the canonical identity schema and add refresh-session persistence; implement API + web login design + shared typed client/Zod contracts.
 
-## 1. Purpose of Prompt
+## 1. Purpose
 
-Turn the existing `apps/web-erp` scaffold into a polished, responsive AlMomiaa ERP application shell with bilingual Arabic/English support, true RTL/LTR layout, and persistent light/dark theme selection. Establish the shared `@almomiaa/ui` component library and Storybook 8 studio so the web app uses reusable, individually maintained components.
+Implement a secure, end-to-end authentication foundation for the existing AlMomiaa ERP:
 
-Use the attached logo unchanged. The Arabic brand label in the interface must be `المومياء`; the English label must be `AlMomiaa`.
+- Persist canonical users, roles, permissions, and warehouse assignments in SQL Server through EF Core.
+- Implement login, refresh, and logout endpoints in the .NET 9 Web API.
+- Define precise backend request/response contracts and share their TypeScript equivalents with the web frontend through `@almomiaa/api-client`, using OpenAPI-aligned types and Zod validation.
+- Build a responsive, bilingual Arabic/English login experience consistent with the existing AlMomiaa UI design system.
+- Bootstrap the existing dashboard shell from the authenticated session without treating frontend navigation as an authorization boundary.
 
-This prompt is for design-system and application-shell work only. Do not implement real ERP workflows, API calls, authentication, business data, or backend features.
+This prompt does not include public registration, forgot/reset password, MFA/OTP, user administration screens/endpoints, or any unrelated ERP workflow.
 
-## 2. Scope and Target Execution Agents
+## 2. Architectural References and Existing Schema
 
-1. `@Design System UI` — create the minimal pnpm/Turborepo workspace wiring required for the selected apps, implement `packages/ui-kit` tokens and reusable components, and configure Storybook 8 in `apps/design-system-studio`.
-2. `@Frontend Engineer` — integrate `@almomiaa/ui` into `apps/web-erp`, implement the app shell, language/theme preferences, and the static dashboard sample.
-3. `@QA & Security Auditor` — verify accessibility, responsive behavior, localization, token usage, workspace boundaries, Storybook coverage, and build/typecheck results.
-4. `@Orchestrator` — coordinate the sequence, resolve integration issues, and archive/log the prompt only after QA passes.
+Before implementation, read and obey:
 
-Do not invoke `@Backend .NET`; no backend work is in scope.
+- `docs/architecture/00-ADR-Architecture-Decisions.md`
+- `docs/architecture/05-Database.md`
+- `docs/architecture/06-API-Specification.md`
+- `docs/architecture/07-Security.md`
+- `.github/skills/cqrs-efcore-patterns/SKILL.md`
+- `.github/skills/zatca-phase2-compliance/SKILL.md` only where shared backend conventions apply
+- `.github/skills/design-token-governance/SKILL.md`
 
-## 3. Target Files to Create or Modify
+`05-Database.md` already defines `[id].[Users]`, `[id].[Roles]`, `[id].[RolePermissions]`, `[id].[UserRoles]`, and `[id].[UserWarehouses]`. Map these existing contracts instead of inventing a parallel user schema. Add only the session persistence needed for secure rotating refresh tokens, and update the database/API/security docs to match the implemented authentication contract.
 
-Inspect the existing scaffold first. Preserve compatible work and modify only the following paths plus directly necessary package lock/config files:
+Preserve the mandated security semantics:
 
-### Workspace root
+- Access JWT lifetime: 10 minutes.
+- Refresh-session maximum lifetime: 14 days; rotate the refresh token on every successful refresh.
+- Web refresh token: opaque, host-only `HttpOnly`, `Secure`, `SameSite=Strict` cookie; never return it in JSON or expose it to JavaScript.
+- JWT context: `UserId`, `RoleCodes`, `RepType`, `DefaultWarehouseId`, `AssignedWarehouseIds`, `SecurityStamp`, and effective permission claims required by explicit API policies. Include the same effective role/permission/warehouse context in the authenticated session response.
+- Redis security-stamp validation and immediate revocation per `07-Security.md`.
+- Every future protected API endpoint continues to enforce server-side policies and row-level scoping.
 
-- `package.json` — private workspace manifest, pinned pnpm package-manager version, and `build`, `lint`, `typecheck`, and `test` scripts for JavaScript packages only.
-- `pnpm-workspace.yaml` — include `apps/*` and `packages/*`.
-- `turbo.json` — define the workspace task graph for build, lint, typecheck, and Storybook build without attempting to run .NET projects through Turbo.
-- `pnpm-lock.yaml` — generate/update using pnpm.
+## 3. Target Execution Agents and Order
 
-Migrate `apps/web-erp` to the pnpm workspace and `workspace:*` dependency for `@almomiaa/ui`. Remove its app-local `package-lock.json` only after the root lockfile is generated and the app builds successfully with pnpm. Do not add unrelated workspace packages or scripts.
+1. **`@Backend .NET`** — implement canonical identity persistence, refresh-session persistence, authentication application services/handlers, JWT and refresh-cookie behavior, `AuthController`, and backend tests.
+2. **`@Design System UI`** — add only the reusable form controls required by login (for example `TextField` and `PasswordField`) to `packages/ui-kit`, with accessible props, tokens, and CSF3 stories.
+3. **`@Frontend Engineer`** — add request/response contracts and authenticated Axios session handling in `packages/api-client`, then implement the bilingual login page and session bootstrap in `apps/web-erp`.
+4. **`@QA & Security Auditor`** — audit API authorization/cookie/session security, schema alignment, contract consistency, accessibility, and all acceptance criteria. Fixes must be routed to the owning specialist and re-audited.
+5. **`@Orchestrator`** — coordinate handoffs and archive/log only after QA returns `PASS`.
 
-### `packages/ui-kit` (`@almomiaa/ui`)
+The Backend agent must publish the endpoint and OpenAPI contract before the Frontend agent finalizes client contracts. The Design System task may run in parallel with backend implementation.
 
-Create a strict, pure React/Tailwind component package with:
+## 4. Database and Backend Implementation
 
-- `package.json`, `tsconfig.json`, `tailwind.preset.ts`, and `src/index.ts`.
-- Package exports for the public component entrypoint, `tailwind.preset.ts`, and `src/tokens/tokens.css`.
-- `src/tokens/tokens.css` as the single source of brand and semantic theme tokens.
-- The attached logo copied unchanged to `src/assets/almomiaa-logo.jpg`. The supplied attachment is read-only; never edit or overwrite the source file.
-- Each reusable component in its own file, with typed props and no business/API dependencies:
-  - `src/components/brand/BrandLogo.tsx`
-  - `src/components/actions/Button.tsx`
-  - `src/components/actions/IconButton.tsx`
-  - `src/components/navigation/SidebarNavItem.tsx`
-  - `src/components/navigation/Sidebar.tsx`
-  - `src/components/layout/AppHeader.tsx`
-  - `src/components/layout/ResponsiveAppShell.tsx`
-  - `src/components/preferences/LocaleSwitcher.tsx`
-  - `src/components/preferences/ThemeToggle.tsx`
-  - `src/components/surfaces/SurfaceCard.tsx`
-  - `src/components/surfaces/SummaryCard.tsx`
+### 4.1 Identity persistence
 
-Keep the library prop-driven and portable across Next.js and Vite. It must not import Axios, Next.js router APIs, TanStack Query, business DTOs, or app-specific locale/theme providers. Components receive navigation items, current locale/theme, and callbacks through typed props. Verify the bundled logo asset can be consumed by both the Next.js app and Storybook without an external URL.
+Create EF Core entities/configurations and migrations aligned to the existing `[id]` DDL:
 
-### `apps/design-system-studio`
+- `id.Users`: UUIDv7 primary key; unique employee code and phone; Arabic/English names; optional email; password hash; rep type; default warehouse; security stamp; active flag; created UTC timestamp.
+- `id.Roles` and `id.RolePermissions`: canonical role codes and permission claim names.
+- `id.UserRoles`: user-role join.
+- `id.UserWarehouses`: assigned warehouse join, maintaining the existing warehouse FK relationship when the inventory schema is present.
+- Seed the canonical role codes and permission claims from `07-Security.md` idempotently; never seed a production user or password.
 
-Create a standalone Storybook 8 + Vite studio with:
+Do not silently rename columns, remove constraints, or duplicate role/permission data in a new schema. Use EF Core configurations and `.AsNoTracking()` for read projections. Keep the Domain independent of EF Core and ASP.NET Core.
 
-- `package.json`
-- `.storybook/main.ts`
-- `.storybook/preview.ts`
-- `storybook` and `build-storybook` scripts in its package manifest.
-- `src/stories/<ComponentName>.stories.tsx` for every public component exported by `@almomiaa/ui`
-- `src/stories/Introduction.mdx` documenting the brand, token usage, directions, themes, and responsive preview controls
+### 4.2 Refresh-session persistence
 
-Use CSF3 stories with `autodocs`. Every component story must demonstrate Arabic RTL and English LTR, plus loading/empty/error states where the component meaningfully owns those states; do not invent business behavior for purely presentational controls. Provide Storybook controls/decorators for light/dark theme and responsive viewports. `ResponsiveAppShell` stories must cover expanded desktop, compact medium-screen, and open/closed mobile drawer states. Configure the a11y addon and ensure stories render without a Next.js runtime.
+Add a narrowly scoped table/entity such as `[id].[RefreshTokenSessions]` for rotation and revocation. It must:
 
-### `apps/web-erp`
+- Store only a cryptographic hash of each opaque random refresh token, never the raw token.
+- Associate sessions with a user and a session/family identifier; record issued, expiry, revoked timestamps and replacement/revocation relationships.
+- Enforce uniqueness for token hashes and add indexes supporting active-session lookup and user revocation.
+- Include optimistic concurrency protection for rotation/revocation.
+- Make rotation atomic. Detect reuse of a rotated/revoked token and revoke the affected session family; never mint a second valid token from the same refresh token.
+- Enforce a maximum 14-day session lifetime and bind each cookie token to its server-side session.
 
-Update the existing app scaffold with:
+Use secure cryptographic randomness and a constant-time hash comparison. Keep secrets/keys out of source control and migrations.
 
-- `package.json` — use workspace `@almomiaa/ui` and `next-themes`; preserve strict TypeScript.
-- `next.config.ts` — configure workspace package transpilation as required.
-- `tailwind.config.ts` — consume the shared UI preset.
-- `src/app/layout.tsx`, `src/app/globals.css`, and `src/app/page.tsx`.
-- `src/providers/ThemeProvider.tsx` and `src/providers/LocaleProvider.tsx`.
-- Separate Arabic and English message modules under `src/locales/`.
-- Only add app-specific components/providers when needed; keep every reusable visual component in `packages/ui-kit`.
+### 4.3 Backend files to create/modify
 
-## 4. UI Behavior and Content Requirements
+At minimum, place code within these existing Clean Architecture projects:
 
-### Responsive application shell
+- `apps/backend-api/src/AlMomiaa.Domain/Identity/User.cs`
+- `apps/backend-api/src/AlMomiaa.Domain/Identity/RefreshTokenSession.cs`
+- `apps/backend-api/src/AlMomiaa.Application/Authentication/Contracts/LoginRequest.cs`
+- `apps/backend-api/src/AlMomiaa.Application/Authentication/Contracts/AuthenticationResponse.cs`
+- `apps/backend-api/src/AlMomiaa.Application/Authentication/Contracts/AuthenticatedUserDto.cs`
+- `apps/backend-api/src/AlMomiaa.Application/Authentication/Contracts/RefreshRequest.cs` (empty body or no-body contract; refresh credential comes only from cookie)
+- `apps/backend-api/src/AlMomiaa.Application/Authentication/Commands/Login/*`
+- `apps/backend-api/src/AlMomiaa.Application/Authentication/Commands/RefreshSession/*`
+- `apps/backend-api/src/AlMomiaa.Application/Authentication/Commands/Logout/*`
+- `apps/backend-api/src/AlMomiaa.Application/Authentication/Abstractions/`
+- `apps/backend-api/src/AlMomiaa.Infrastructure/Persistence/AlMomiaaDbContext.cs`
+- `apps/backend-api/src/AlMomiaa.Infrastructure/Persistence/Configurations/Identity/*`
+- `apps/backend-api/src/AlMomiaa.Infrastructure/Persistence/Migrations/*`
+- `apps/backend-api/src/AlMomiaa.Infrastructure/Authentication/`
+- `apps/backend-api/src/AlMomiaa.Infrastructure/DependencyInjection.cs`
+- `apps/backend-api/src/AlMomiaa.WebApi/Controllers/AuthController.cs`
+- `apps/backend-api/src/AlMomiaa.WebApi/Program.cs`
+- `apps/backend-api/src/AlMomiaa.WebApi/appsettings.json` only for non-secret safe defaults; secrets and environment values come from configuration/environment.
+- `apps/backend-api/tests/` authentication unit/architecture/integration tests in the existing test project or a narrowly scoped new test project.
 
-- Large screens (`>=1280px`): expanded persistent aside navigation and full workspace header.
-- Medium screens (`768–1279px`): compact icon rail with an accessible expand/collapse control.
-- Small screens (`<768px`): compact header and off-canvas aside drawer with scrim; support Escape, focus management, close-on-navigation, and restored focus.
-- Prevent horizontal overflow at 375px, 768px, and 1280px widths. Use logical CSS/Tailwind properties only.
-- Use the starter navigation sections with these labels: Dashboard / لوحة التحكم, Sales / المبيعات, Customers / العملاء, Inventory / المخزون, Purchasing / المشتريات, Finance / المالية, Reports / التقارير, Settings / الإعدادات. Dashboard is the only active sample page; other items must be clearly non-functional placeholders, not dead `href="#"` links.
+The exact implementation may add small, directly related files (for example entity configurations, validators, options, or migration designer files) under these same projects.
 
-### Arabic/English and direction
+### 4.4 Security behavior
 
-- Initial locale is `ar-SA`, direction `rtl`; English locale is `en-US`, direction `ltr`.
-- Provide a visible language switcher that updates all shell/sample labels, the document `lang` and `dir`, and persists the selection across reloads.
-- Persist locale in a server-readable `almomiaa-locale` cookie. Initialize the locale provider from the cookie so root `html` attributes and the initial render agree without hydration mismatch.
-- Render the Arabic brand text exactly as `المومياء` and the English text as `AlMomiaa`.
-- Use `--font-arabic` for RTL and `--font-latin` for LTR/Latin identifiers. Do not fetch fonts at runtime from external services.
+- Hash passwords with a framework-maintained secure password hasher; never store or log plaintext passwords.
+- Validate the login identifier and password; normalize phone and employee-code lookups consistently with uniqueness constraints.
+- Return the same generic unauthorized response for unknown identifier, incorrect password, and inactive account; do not reveal which condition failed.
+- Apply bounded rate limiting/lockout to login attempts, keyed by appropriate client and identifier signals. Avoid permanent lockout denial-of-service; document the configured policy.
+- Configure and validate JWT issuer, audience, signing key, and expiry from configuration; fail safely when required production security configuration is absent. Never ship a default signing secret.
+- Implement Redis-backed `SecurityStamp` validation using `user:stamp:{userId}` and ensure user deactivation or stamp rotation invalidates active access tokens promptly.
+- Use explicit authorization metadata: login, refresh, and logout are intentionally public endpoints; all new non-auth endpoints remain protected by explicit permission policies.
+- Return RFC 7807 `ProblemDetails` errors without leaking passwords, token values, hashes, or user existence.
+- Configure credentialed CORS only for explicitly configured trusted frontend origins; never combine credentials with wildcard origins.
+- For the refresh cookie, set `HttpOnly`, `Secure`, `SameSite=Strict`, omit the `Domain` attribute, use the narrow `/api/v1/auth` path, and set the 14-day maximum expiry. Clear it on logout and failed/replayed refresh. Do not weaken production cookie policy for local HTTP.
+- Protect cookie-authenticated refresh/logout from cross-site requests with strict configured-origin validation (and an explicit anti-CSRF mechanism if the deployment topology requires it); never allow arbitrary origins with credentials.
+- Fail closed for protected requests if Redis security-stamp validation is unavailable; return an explicit service error rather than accepting a token without revocation verification.
 
-### Theme
+## 5. Canonical HTTP Contracts
 
-- Provide light and dark modes and a visible theme toggle.
-- Initial mode follows the system preference; persist the user's explicit selection.
-- Use `next-themes` with the `data-theme` attribute, system detection, and the `almomiaa-theme` storage key.
-- Avoid a flash of the wrong theme and avoid server/client hydration mismatch.
-- Theme state must be app-owned; shared components receive theme state/callbacks rather than accessing Next.js APIs or storage directly.
+All routes use the existing `/api/v1` prefix and match `06-API-Specification.md`.
 
-### Static sample dashboard
+### `POST /api/v1/auth/login` — public
 
-- Render a concise Arabic-first welcome/dashboard preview inside the shell, with translated English content when selected.
-- Use only clearly labeled illustrative values or neutral placeholders; no API, database, authentication, real customer/product data, or business actions.
+Request JSON:
 
-## 5. Design Tokens and Visual Governance
+```json
+{
+  "identifier": "employee-code-or-phone",
+  "password": "user-supplied-password"
+}
+```
 
-Follow `.github/skills/design-token-governance/SKILL.md` as the single source of truth:
+Response JSON (refresh token is set only in `Set-Cookie`):
 
-- Define all CSS color custom properties in `packages/ui-kit/src/tokens/tokens.css` and export them from `@almomiaa/ui`.
-- Preserve canonical gold and obsidian tokens (`#CFA434`, `#B88E24`, `#F5EED8`, `#1C1B1A`, `#262523`, `#F8F7F4`) and semantic status tokens. Add light/dark semantic surface, text, border, and focus tokens without inventing off-brand colors.
-- Map shared tokens into `tailwind.preset.ts`. Apps must consume tokens; no hardcoded hex values or one-off color definitions in `apps/web-erp`.
-- Meet WCAG 2.1 AA contrast. On gold primary controls use obsidian text; on obsidian surfaces use inverse text and gold accents.
-- Use logical classes/properties (`ms-*`, `me-*`, `ps-*`, `pe-*`, `start-*`, `end-*`, `text-start`, `text-end`) and direction-aware icon rotation. Do not use `ml-*`, `mr-*`, `pl-*`, `pr-*`, `left-*`, or `right-*` for directional layout.
-- Use the supplied JPEG unchanged on an obsidian/charcoal surface with preserved aspect ratio and `object-fit: contain`. Do not crop, recolor, or remove its background. When the aside is compact, show the Arabic/English text fallback instead of a cropped logo.
+```json
+{
+  "accessToken": "<short-lived-jwt>",
+  "tokenType": "Bearer",
+  "expiresIn": 600,
+  "user": {
+    "id": "01933c90-9999-7000-8000-abcdef123456",
+    "employeeCode": "EMP-0001",
+    "fullNameAr": "اسم المستخدم",
+    "fullNameEn": "User Name",
+    "roleCodes": ["SALES_MGR"],
+    "permissions": ["orders:approve"],
+    "repType": null,
+    "defaultWarehouseId": null,
+    "assignedWarehouseIds": []
+  }
+}
+```
 
-## 6. Storybook Component Mapping
+### `POST /api/v1/auth/refresh` — public, cookie-authenticated
 
-| Component | Responsibility | Required story coverage |
-|---|---|---|
-| `BrandLogo` | Supplied mark and localized brand text | Full and compact; Arabic RTL and English LTR; light/dark surfaces |
-| `Button` / `IconButton` | Accessible shared actions | Variants, keyboard focus, disabled state, both directions, both themes |
-| `SidebarNavItem` | One accessible navigation entry | Active, inactive, placeholder, collapsed, RTL/LTR |
-| `Sidebar` | Aside navigation list and brand area | Expanded, compact, mobile drawer, both directions |
-| `AppHeader` | Workspace header and preference controls | Arabic/English labels, both themes, responsive controls |
-| `ResponsiveAppShell` | Header/aside/content composition | Desktop, medium rail, mobile drawer open/closed, RTL/LTR and light/dark |
-| `LocaleSwitcher` | `ar-SA` / `en-US` control | Both selected locales and keyboard operation |
-| `ThemeToggle` | Light/dark control | Both states, accessible labels, keyboard operation |
-| `SurfaceCard` / `SummaryCard` | Reusable static dashboard surfaces | Content and placeholder states, both directions and themes |
+- Request body is empty; authenticate only from the refresh cookie.
+- Atomically rotate the refresh session and set a new cookie.
+- Return the same access-session response contract as login.
+- On invalid, expired, revoked, replayed, inactive-user, or security-stamp-invalid sessions: clear the cookie and return a safe RFC 7807 response.
 
-Every new public component must have exactly one corresponding CSF3 story file (combined files are acceptable only for explicitly paired variants such as `Button` and `IconButton`). Stories must be deterministic and use mock props only; include meaningful loading/empty/error or applicable disabled/active/placeholder states without inventing feature workflows.
+### `POST /api/v1/auth/logout` — public, cookie-authenticated and idempotent
 
-## 7. Data, Security, and Domain Rules
+- Revoke the current refresh session/family when a valid cookie is present.
+- Always clear the refresh cookie and return `204 No Content`; do not disclose whether the cookie was valid.
 
-- No backend/API work, DTOs, database entities, migrations, authentication, RBAC controls, or business workflow implementation.
-- Do not imply frontend navigation visibility is authorization. Placeholder sections carry no role-specific permission logic.
-- Do not add credentials, environment-specific API URLs, ZATCA configuration, or mock personal/customer data.
-- Locale/theme persistence is presentation preference only; do not store sensitive or business data.
-- Respect API and security boundaries from `docs/architecture/06-API-Specification.md` and `docs/architecture/07-Security.md` if future integration points are referenced, but do not implement those integrations.
+Use typed C# request/response DTOs in Application and keep the Controller thin. Publish the exact request, response, cookie, and error contracts through the Web API OpenAPI document.
 
-## 8. Acceptance Criteria (Definition of Done)
+## 6. Shared Frontend Contract and API Client
 
-- [ ] Root pnpm/Turborepo configuration links `apps/web-erp`, `apps/design-system-studio`, and `packages/ui-kit`; backend projects are excluded from JavaScript build tasks.
-- [ ] `apps/web-erp` consumes `@almomiaa/ui` through the workspace and displays the responsive shell and static sample dashboard.
-- [ ] Arabic is the default (`ar-SA`, RTL); English (`en-US`, LTR) switch updates all visible strings and document attributes and persists without hydration warnings.
-- [ ] Light/dark themes work, default to the system preference, persist explicit choices, and have no visible incorrect-theme flash.
-- [ ] Layout behavior is verified at 375px, 768px, and 1280px; no horizontal overflow; mobile drawer supports keyboard and focus behavior.
-- [ ] The attached logo is copied unchanged into the UI package and rendered with preserved aspect ratio; compact state uses a text fallback.
-- [ ] Every public `@almomiaa/ui` component has an individual source file and corresponding CSF3 story with Arabic RTL and English LTR coverage; Storybook global controls cover both themes and viewport sizes.
-- [ ] Token and accessibility audit passes: no hardcoded app hex colors, no forbidden directional layout utilities, WCAG 2.1 AA contrast, keyboard access, and no a11y addon violations in core stories.
-- [ ] Shared UI package contains no prohibited business or framework imports.
-- [ ] `pnpm install`, frontend lint/typecheck/build, Storybook build, and the `@QA & Security Auditor` gate pass.
-- [ ] No backend, business workflow, API, database, authentication, or rep-PWA feature scope was added.
-- [ ] After QA passes, `@Orchestrator` archives this prompt as `docs/agent-ops/prompt-history/0002-responsive-bilingual-erp-ui-shell.md`, updates `docs/agent-ops/PROJECT_LOG.md`, and marks this prompt completed.
+Create `packages/api-client` as the frontend’s only authentication HTTP boundary:
+
+- `packages/api-client/package.json`, strict `tsconfig.json`, and public `src/index.ts`.
+- `packages/api-client/src/auth/auth.types.ts` — TypeScript interfaces/types matching backend DTOs.
+- `packages/api-client/src/auth/auth.schemas.ts` — Zod request/response validation schemas.
+- `packages/api-client/src/auth/auth.service.ts` — login/refresh/logout API operations.
+- `packages/api-client/src/http/axios.ts` — configured Axios instance, credentials support, cancellation, and base URL from environment/configuration (no hard-coded deployment URL).
+- `packages/api-client/src/auth/access-token-store.ts` — in-memory-only access token storage.
+- Refresh interceptor must single-flight concurrent refresh requests, prevent refresh loops, clear in-memory access state on terminal failure, and propagate errors explicitly.
+
+Prefer OpenAPI-generated request/response types when compatible with the existing API codegen path; ensure Zod runtime schemas validate the same shapes. Do not return or store refresh tokens in frontend contracts.
+
+### Shared interface shape
+
+The frontend contract must expose an equivalent typed shape:
+
+```ts
+export interface LoginRequest {
+  identifier: string;
+  password: string;
+}
+
+export interface AuthenticatedUser {
+  id: string;
+  employeeCode: string;
+  fullNameAr: string;
+  fullNameEn: string | null;
+  roleCodes: string[];
+  permissions: string[];
+  repType: string | null;
+  defaultWarehouseId: number | null;
+  assignedWarehouseIds: number[];
+}
+
+export interface AuthenticationResponse {
+  accessToken: string;
+  tokenType: "Bearer";
+  expiresIn: number;
+  user: AuthenticatedUser;
+}
+```
+
+Keep C# DTO JSON property names and TypeScript/Zod fields synchronized and verified against OpenAPI. Refresh and logout have no token-bearing request DTO fields.
+
+## 7. Web Login and Session UX
+
+### Files to create/modify
+
+- `apps/web-erp/src/app/login/page.tsx`
+- `apps/web-erp/src/app/login/loading.tsx` if required for a stable route transition
+- `apps/web-erp/src/features/auth/LoginForm.tsx`
+- `apps/web-erp/src/providers/AuthProvider.tsx`
+- `apps/web-erp/src/app/layout.tsx` and existing providers only as needed
+- `apps/web-erp/src/locales/ar.ts`
+- `apps/web-erp/src/locales/en.ts`
+- `apps/web-erp/src/app/globals.css` only if token-based styling requires an update
+- `apps/web-erp/.env.example` with a non-secret API base URL placeholder only if required by the client configuration
+- `packages/ui-kit/src/components/forms/TextField.tsx`
+- `packages/ui-kit/src/components/forms/PasswordField.tsx`
+- exports from `packages/ui-kit/src/index.ts`
+- corresponding Storybook CSF3 stories for each new public form component
+
+### Login design requirements
+
+- Follow the existing AlMomiaa shell tokens, typography, theme, and locale providers.
+- Default to `ar-SA` / RTL; support `en-US` / LTR, light and dark themes.
+- Display the supplied AlMomiaa identity and the exact Arabic brand name `المومياء`; do not modify/crop the logo asset.
+- Provide accessible identifier and password inputs, show/hide password control, submit button, pending state, field validation, and generic authentication failure message.
+- Login identifier label/help text must clearly support phone number or employee code.
+- Use semantic form controls, visible keyboard focus, associated labels, `aria-invalid`/error descriptions, and minimum 44px interactive targets.
+- Do not add a public registration link or forgot-password UI because those flows are out of scope.
+- On successful authentication, store the access token only in memory and enter the existing ERP shell. On initial app boot, attempt cookie-based refresh before showing protected shell content. On refresh failure, clear auth state and route to `/login`.
+- Logout invokes the API, clears in-memory access state, and returns to `/login`. Frontend route protection is UX only; every protected API request must be authorized by the backend.
+- Translate all UI labels and authentication errors. Do not display raw backend exception details.
+- No real user names or business records in sample UI; use the authenticated user DTO or neutral placeholders only.
+
+### Session handling rules
+
+- Never put access or refresh tokens in `localStorage`, `sessionStorage`, IndexedDB, URLs, analytics, console output, or error logs.
+- Use Axios `withCredentials` for refresh/logout so the browser sends the HttpOnly cookie; configure backend CORS accordingly.
+- Keep access JWT in memory only. Re-establish it after reload through refresh cookie.
+- A `401` may trigger at most one coordinated refresh/retry; logout or clear session on terminal failure.
+- Do not claim that a frontend route guard provides authorization.
+
+## 8. Documentation Changes
+
+Update the architecture documentation in the same change:
+
+- `docs/architecture/05-Database.md`: add the refresh-session table and indexes, preserving the existing canonical identity DDL.
+- `docs/architecture/06-API-Specification.md`: document exact login/refresh/logout request/response shapes, cookie attributes, status/error behavior, and OpenAPI contracts.
+- `docs/architecture/07-Security.md`: document password hashing, generic errors, rate limits, refresh rotation/replay revocation, cookie policy, access-token storage, and CORS requirements.
+
+Do not change unrelated domain schemas, endpoints, or architectural decisions.
+
+## 9. Acceptance Criteria (Definition of Done)
+
+- [ ] EF Core identity mappings and migration align with `[id].[Users]`, `[id].[Roles]`, `[id].[RolePermissions]`, `[id].[UserRoles]`, and `[id].[UserWarehouses]` in `05-Database.md`.
+- [ ] Refresh-session persistence stores only token hashes, supports atomic rotation and replay detection, is concurrency-safe, and has the documented maximum lifetime.
+- [ ] `POST /api/v1/auth/login`, `/refresh`, and `/logout` match the documented contracts, OpenAPI output, cookie semantics, and public authorization metadata.
+- [ ] JWT has the required 10-minute lifetime and identity/role/effective-permission/warehouse/security-stamp context; permissions returned to the frontend are based on assigned roles, not client input.
+- [ ] Canonical role and permission seed data is idempotent and creates no default production user or password.
+- [ ] Redis security-stamp validation and invalidation are implemented; no default signing key, production credential, or wildcard credentialed CORS is committed.
+- [ ] Wrong password, unknown user, and inactive user do not reveal account existence; login throttling/lockout is covered by tests.
+- [ ] Backend unit/integration tests cover valid and invalid login, phone and employee-code lookup, inactive accounts, token claims, cookie flags, refresh rotation, replay, expiry, logout revocation, and security-stamp invalidation.
+- [ ] OpenAPI, C# DTOs, TypeScript interfaces, and Zod schemas agree; refresh credentials never appear in JSON.
+- [ ] Web login page is usable in Arabic RTL and English LTR, light/dark, keyboard-only, and narrow/mobile viewport; validation, pending, and generic error states are translated and accessible.
+- [ ] Access tokens exist only in memory in the frontend; refresh is cookie-based and refresh interceptor is single-flight with no retry loop.
+- [ ] Existing ERP shell is unavailable to unauthenticated users through UX session bootstrap, while backend remains the actual authorization boundary.
+- [ ] `@almomiaa/ui` form controls have individual files and corresponding RTL/LTR Storybook stories; no app-local duplicate visual controls or hardcoded app colors are introduced.
+- [ ] Backend build/tests, API-client typecheck/lint/tests, web-erp typecheck/lint/build, relevant Storybook build, and `@QA & Security Auditor` all pass.
+- [ ] `05-Database.md`, `06-API-Specification.md`, and `07-Security.md` are updated only for the authentication behavior implemented.
+- [ ] No public registration, password reset/MFA, user administration UI, or unrelated ERP workflow is added.
+- [ ] After QA returns `PASS`, archive as `docs/agent-ops/prompt-history/0003-user-authentication-and-login.md`, update `docs/agent-ops/PROJECT_LOG.md`, and mark this prompt completed. Do not archive before validation.

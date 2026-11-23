@@ -5,3 +5,9 @@ node_modules/
 **/storybook-static/
 **/.next/
 *.tsbuildinfo
+out/
+build/
+.env*.local
+.DS_Store
+EOF
+.vs/

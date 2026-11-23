@@ -20,3 +20,8 @@ export { SurfaceCard } from "./components/surfaces/SurfaceCard";
 export type { SurfaceCardProps, SurfaceState } from "./components/surfaces/SurfaceCard";
 export { SummaryCard } from "./components/surfaces/SummaryCard";
 export type { SummaryCardProps } from "./components/surfaces/SummaryCard";
+
+export { TextField } from "./components/forms/TextField";
+export type { TextFieldProps } from "./components/forms/TextField";
+export { PasswordField } from "./components/forms/PasswordField";
+export type { PasswordFieldProps } from "./components/forms/PasswordField";
