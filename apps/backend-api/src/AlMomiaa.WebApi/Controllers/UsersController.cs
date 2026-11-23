@@ -29,6 +29,17 @@ public sealed class UsersController(IMediator mediator) : ControllerBase
     }
 
     [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.UsersManage)]
+    [HttpGet("users/{id:guid}")]
+    [ProducesResponseType<UserDetailDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [EndpointSummary("Get full employee profile including assigned roles, warehouses, and effective permission claims")]
+    public async Task<ActionResult<UserDetailDto>> GetUserById(Guid id, CancellationToken ct)
+    {
+        var result = await mediator.Send(new GetUserByIdQuery(id), ct);
+        return Ok(result);
+    }
+
+    [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.UsersManage)]
     [HttpPost("users")]
     [ProducesResponseType<UserSummaryDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -55,13 +66,55 @@ public sealed class UsersController(IMediator mediator) : ControllerBase
     }
 
     [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.PermissionsManage)]
+    [HttpPut("users/{id:guid}/roles")]
+    [ProducesResponseType<UserDetailDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [EndpointSummary("Assign or replace roles on an employee account and immediately rotate SecurityStamp")]
+    public async Task<ActionResult<UserDetailDto>> UpdateUserRoles(
+        Guid id,
+        [FromBody] UpdateUserRolesRequest request,
+        CancellationToken ct)
+    {
+        var updated = await mediator.Send(new UpdateUserRolesCommand(id, request.RoleIds), ct);
+        return Ok(updated);
+    }
+
+    [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.UsersManage)]
+    [HttpPut("users/{id:guid}/warehouses")]
+    [ProducesResponseType<UserDetailDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [EndpointSummary("Assign or replace warehouses and default warehouse on an employee account and rotate SecurityStamp")]
+    public async Task<ActionResult<UserDetailDto>> UpdateUserWarehouses(
+        Guid id,
+        [FromBody] UpdateUserWarehousesRequest request,
+        CancellationToken ct)
+    {
+        var updated = await mediator.Send(new UpdateUserWarehousesCommand(id, request.DefaultWarehouseId, request.AssignedWarehouseIds), ct);
+        return Ok(updated);
+    }
+
+    [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.PermissionsManage)]
     [HttpGet("roles")]
     [ProducesResponseType<IReadOnlyList<RoleDto>>(StatusCodes.Status200OK)]
-    [EndpointSummary("List all canonical roles and their assigned permission claims")]
+    [EndpointSummary("List all roles and their assigned permission claims")]
     public async Task<ActionResult<IReadOnlyList<RoleDto>>> GetRoles(CancellationToken ct)
     {
         var roles = await mediator.Send(new GetRolesQuery(), ct);
         return Ok(roles);
+    }
+
+    [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.PermissionsManage)]
+    [HttpPost("roles")]
+    [ProducesResponseType<RoleDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [EndpointSummary("Create a custom role with a tailored set of canonical ERP permission claims")]
+    public async Task<ActionResult<RoleDto>> CreateRole([FromBody] CreateRoleRequest request, CancellationToken ct)
+    {
+        var created = await mediator.Send(new CreateRoleCommand(request), ct);
+        return Created($"/api/v1/roles/{created.Id}", created);
     }
 
     [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.PermissionsManage)]

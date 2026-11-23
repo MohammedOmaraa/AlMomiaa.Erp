@@ -1,7 +1,7 @@
 # AlMomiaa ERP `.NET 9` Backend — Runbook, Per-Column Validation Reference & Troubleshooting Guide
 
 > **Downloadable Postman Suite:**
-> - **Collection (10 Categorized Folders, 69 Requests):** `docs/api/AlMomiaa-ERP.postman_collection.json`
+> - **Collection (10 Categorized Folders, 73 Requests):** `docs/api/AlMomiaa-ERP.postman_collection.json`
 > - **Local Environment (Auto-Chained Variables):** `docs/api/AlMomiaa-Local.postman_environment.json`
 
 ---
@@ -91,9 +91,13 @@ All protected endpoints require `Authorization: Bearer <accessToken>`. All valid
 | Endpoint | Required Policy | Payload Fields & Column Validations |
 |---|---|---|
 | `GET /api/v1/users` | `users:manage` | Query: `search` (max 100), `roleCode` (max 30), `isActive` (bool), `page` (>= 1), `pageSize` (1..250). |
-| `POST /api/v1/users` | `users:manage` | `employeeCode` (required, max 30, regex `^[A-Za-z0-9\-_]+$`, unique → `409`), `fullNameAr` (required, max 150), `fullNameEn` (max 150), `phone` (required, max 20, regex `^\+?[0-9\s\-()]{9,20}$`, unique → `409`), `email` (valid email, max 150), `password` (required, min 10, max 128, must contain upper + lower + digit + special char), `repType` (`Wholesale`, `Retail`, `CashVan`, or null), `roleIds` (non-empty `int[]`), `assignedWarehouseIds` (`int[]`), `createMobileVan` (bool; auto-provisions `MobileVan` + `RepCustodyWallet` for `CashVan`), `vehiclePlateNumber` (max 30). |
+| `GET /api/v1/users/{id}` | `users:manage` | Returns user profile, assigned roles, assigned warehouses, and computed `effectivePermissions[]`. |
+| `POST /api/v1/users` | `users:manage` | `employeeCode` (required, max 30, regex `^[A-Za-z0-9\-_]+$`, unique → `409`), `fullNameAr` (required, max 150), `fullNameEn` (max 150), `phone` (required, max 20, regex `^\+?[0-9\s\-()]{9,20}$`, unique → `409`), `email` (valid email, max 150), `password` (required, min 8, max 128, must contain upper + lower + digit + special char), `repType` (`Wholesale`, `Retail`, `CashVan`, or null), `roleIds` (non-empty `int[]`), `assignedWarehouseIds` (`int[]`), `createMobileVan` (bool; auto-provisions `MobileVan` + `RepCustodyWallet` for `CashVan`), `vehiclePlateNumber` (max 30). |
 | `PATCH /api/v1/users/{id}/status` | `users:manage` | `isActive` (bool). Setting `false` rotates `SecurityStamp` and revokes active tokens immediately. |
-| `GET /api/v1/roles` | `permissions:manage` | Lists all 7 canonical roles and their claims. |
+| `PUT /api/v1/users/{id}/roles` | `permissions:manage` | `roleIds` (non-empty `int[]`). Replaces user's roles, logs audit diff, and immediately rotates `SecurityStamp`. |
+| `PUT /api/v1/users/{id}/warehouses` | `users:manage` | `defaultWarehouseId` (optional `int > 0`), `assignedWarehouseIds` (`int[]`). Replaces user's warehouse assignments and rotates `SecurityStamp`. |
+| `GET /api/v1/roles` | `permissions:manage` | Lists all canonical and custom roles and their claims. |
+| `POST /api/v1/roles` | `permissions:manage` | `roleCode` (required, max 30, regex `^[A-Za-z0-9_]+$`, unique → `409`), `nameAr` (max 100), `nameEn` (max 100), `permissions` (non-empty `string[]` from canonical permission allowlist). |
 | `PUT /api/v1/roles/{roleId}/permissions` | `permissions:manage` | `permissions` (non-empty `string[]`, every value must be a canonical permission claim). Rotates security stamps for all users holding that role. |
 
 ### Category 03 — Customers & Credit Grades (`/api/v1/customers/*`)

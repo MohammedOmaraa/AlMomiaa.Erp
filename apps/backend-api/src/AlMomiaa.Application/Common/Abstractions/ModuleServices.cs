@@ -13,9 +13,13 @@ namespace AlMomiaa.Application.Common.Abstractions;
 public interface IIamModuleService
 {
     Task<PagedResult<UserSummaryDto>> GetUsersAsync(GetUsersQuery query, CancellationToken ct);
+    Task<UserDetailDto> GetUserByIdAsync(Guid userId, CancellationToken ct);
     Task<UserSummaryDto> CreateUserAsync(CreateUserCommand command, CancellationToken ct);
     Task<UserSummaryDto> UpdateUserStatusAsync(UpdateUserStatusCommand command, CancellationToken ct);
+    Task<UserDetailDto> UpdateUserRolesAsync(UpdateUserRolesCommand command, CancellationToken ct);
+    Task<UserDetailDto> UpdateUserWarehousesAsync(UpdateUserWarehousesCommand command, CancellationToken ct);
     Task<IReadOnlyList<RoleDto>> GetRolesAsync(CancellationToken ct);
+    Task<RoleDto> CreateRoleAsync(CreateRoleCommand command, CancellationToken ct);
     Task<RoleDto> UpdateRolePermissionsAsync(UpdateRolePermissionsCommand command, CancellationToken ct);
 }
 

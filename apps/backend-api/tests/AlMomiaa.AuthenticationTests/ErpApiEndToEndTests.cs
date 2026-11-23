@@ -448,5 +448,79 @@ public sealed class ErpApiEndToEndTests
         Assert.Contains("/api/v1/dashboards/executive", openApiJson);
         Assert.Contains("/api/v1/audit-logs", openApiJson);
         Assert.Contains("/api/v1/gps/pings", openApiJson);
+        Assert.Contains("/api/v1/users/{id}/roles", openApiJson);
+        Assert.Contains("/api/v1/users/{id}/warehouses", openApiJson);
+        Assert.Contains("/api/v1/roles", openApiJson);
+    }
+
+    [Fact]
+    public async Task Admin_Can_Create_Custom_Role_Assign_Permissions_To_User_And_Enforce_Immediately()
+    {
+        using var factory = new AuthWebApplicationFactory();
+        await factory.InitializeDatabaseAsync();
+        using var anonClient = factory.CreateClient();
+
+        var (_, adminToken) = await SeedAndLoginAsync(
+            factory, anonClient, "ADM-PERM-01", "+966500009301", "Strong!Pass2026#", CanonicalRolesAndPermissions.Roles.SuperAdmin);
+        using var adminClient = CreateAuthedClient(factory, adminToken);
+
+        // 1. Create custom role with only catalog:view + customers:view
+        var roleResp = await adminClient.PostAsJsonAsync("/api/v1/roles", new CreateRoleRequest(
+            "CUSTOM_VIEWER", "مراجع مخصص", "Custom Viewer", ["catalog:view", "customers:view"]));
+        Assert.Equal(HttpStatusCode.Created, roleResp.StatusCode);
+        var customRole = (await roleResp.Content.ReadFromJsonAsync<RoleDto>(JsonOptions))!;
+        Assert.Equal("CUSTOM_VIEWER", customRole.RoleCode);
+
+        // Unknown permission must fail with 400
+        var invalidRoleResp = await adminClient.PostAsJsonAsync("/api/v1/roles", new CreateRoleRequest(
+            "BAD_ROLE", "خطأ", "Bad", ["nonexistent:perm"]));
+        Assert.Equal(HttpStatusCode.BadRequest, invalidRoleResp.StatusCode);
+
+        // 2. Create user initially with SalesRep role (4), then reassign to customRole + warehouse 1
+        var userResp = await adminClient.PostAsJsonAsync("/api/v1/users", new CreateUserRequest(
+            "EMP-CUSTOM-01", "موظف مخصص", "Custom User", "+966500009302", "custom@almomiaa.sa",
+            "Custom!Pass2026#", null, null, [4], []));
+        Assert.Equal(HttpStatusCode.Created, userResp.StatusCode);
+        var createdUser = (await userResp.Content.ReadFromJsonAsync<UserSummaryDto>(JsonOptions))!;
+
+        var assignRolesResp = await adminClient.PutAsJsonAsync($"/api/v1/users/{createdUser.Id}/roles", new UpdateUserRolesRequest([customRole.Id]));
+        Assert.Equal(HttpStatusCode.OK, assignRolesResp.StatusCode);
+
+        var assignWhResp = await adminClient.PutAsJsonAsync($"/api/v1/users/{createdUser.Id}/warehouses", new UpdateUserWarehousesRequest(1, [1, 2]));
+        Assert.Equal(HttpStatusCode.OK, assignWhResp.StatusCode);
+
+        // 3. Inspect GET /api/v1/users/{id} effective permissions
+        var detail = await adminClient.GetFromJsonAsync<UserDetailDto>($"/api/v1/users/{createdUser.Id}", JsonOptions);
+        Assert.NotNull(detail);
+        Assert.Equal(["CUSTOM_VIEWER"], detail!.RoleCodes);
+        Assert.Equal(["catalog:view", "customers:view"], detail.EffectivePermissions);
+        Assert.Equal([1, 2], detail.AssignedWarehouseIds);
+        Assert.Equal(1, detail.DefaultWarehouseId);
+
+        // 4. New user logs in: allowed on catalog:view (200), forbidden on orders:create (403)
+        var loginResp = await anonClient.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest("+966500009302", "Custom!Pass2026#"));
+        Assert.Equal(HttpStatusCode.OK, loginResp.StatusCode);
+        var userAuth = (await loginResp.Content.ReadFromJsonAsync<AuthenticationResponse>(JsonOptions))!;
+        using var userClient = CreateAuthedClient(factory, userAuth.AccessToken);
+
+        Assert.Equal(HttpStatusCode.OK, (await userClient.GetAsync("/api/v1/catalog/products")).StatusCode);
+        using var blockedOrder = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orders")
+        {
+            Content = JsonContent.Create(new CreateSalesOrderRequest("PreSales", Guid.CreateVersion7(), 1, [new CreateSalesOrderItemRequest(Guid.CreateVersion7(), Guid.CreateVersion7(), 1m, 10m)]))
+        };
+        blockedOrder.Headers.Add("X-Idempotency-Key", Guid.CreateVersion7().ToString());
+        Assert.Equal(HttpStatusCode.Forbidden, (await userClient.SendAsync(blockedOrder)).StatusCode);
+
+        // 5. Admin grants orders:create to CUSTOM_VIEWER -> user's existing JWT is immediately revoked (401)
+        var grantResp = await adminClient.PutAsJsonAsync($"/api/v1/roles/{customRole.Id}/permissions",
+            new UpdateRolePermissionsRequest(["catalog:view", "customers:view", "orders:create"]));
+        Assert.Equal(HttpStatusCode.OK, grantResp.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await userClient.GetAsync("/api/v1/catalog/products")).StatusCode);
+
+        // 6. After re-login, user JWT includes orders:create
+        var reloginResp = await anonClient.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest("+966500009302", "Custom!Pass2026#"));
+        Assert.Equal(HttpStatusCode.OK, reloginResp.StatusCode);
+        var refreshedAuth = (await reloginResp.Content.ReadFromJsonAsync<AuthenticationResponse>(JsonOptions))!;
+        Assert.Contains("orders:create", refreshedAuth.User.Permissions);
     }
 }

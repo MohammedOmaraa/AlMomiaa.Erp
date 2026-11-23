@@ -256,6 +256,26 @@
           ]
         },
         {
+          "name": "Get User Details & Effective Permissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/{{repUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{repUserId}}"
+              ]
+            },
+            "description": "Requires `users:manage`. Returns employee profile, assigned roles, assigned warehouses, and computed `effectivePermissions`."
+          }
+        },
+        {
           "name": "Update User Active Status",
           "request": {
             "method": "PATCH",
@@ -291,6 +311,120 @@
           }
         },
         {
+          "name": "Create Custom Role with Specific Permissions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "roles"
+              ]
+            },
+            "description": "Requires `permissions:manage` (`SUPER_ADMIN`). Creates a custom role with an exact subset of canonical permission claims. Saves `{{customRoleId}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"CUSTOM_AUDITOR\",\n  \"nameAr\": \"مدقق مخصص\",\n  \"nameEn\": \"Custom Auditor\",\n  \"permissions\": [\n    \"catalog:view\",\n    \"customers:view\",\n    \"invoices:view\",\n    \"audit:view\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set(\"customRoleId\", String(pm.response.json().id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign / Replace Roles on User (Grant Permissions)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/{{repUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{repUserId}}",
+                "roles"
+              ]
+            },
+            "description": "Requires `permissions:manage` (`SUPER_ADMIN`). Replaces assigned roles on a user and immediately rotates their SecurityStamp.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleIds\": [\n    4,\n    {{customRoleId}}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Assign / Replace Warehouses on User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/{{repUserId}}/warehouses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{repUserId}}",
+                "warehouses"
+              ]
+            },
+            "description": "Requires `users:manage`. Sets assigned warehouses and optional default warehouse for Warehouse Keepers / Sales Reps and rotates SecurityStamp.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"defaultWarehouseId\": {{warehouseId}},\n  \"assignedWarehouseIds\": [\n    {{warehouseId}}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "List Roles & Permissions",
           "request": {
             "method": "GET",
@@ -306,7 +440,7 @@
                 "roles"
               ]
             },
-            "description": "Requires `permissions:manage`. Lists all 7 canonical ERP roles and their permission claims."
+            "description": "Requires `permissions:manage`. Lists all canonical and custom ERP roles and their permission claims."
           }
         },
         {
@@ -661,7 +795,7 @@
             "description": "Requires `catalog:manage`. Enforces `minAllowedSellingPrice <= wholesaleSellingPrice <= retailSellingPrice` and unique SKU/barcode. Saves `{{productId}}` and `{{productUnitId}}`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sku\": \"ALM-SHMP-400\",\n  \"barcode\": \"6281000001001\",\n  \"nameAr\": \"شامبو المومياء 400 مل\",\n  \"nameEn\": \"AlMomiaa Shampoo 400ml\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"brandId\": \"{{brandId}}\",\n  \"baseUnit\": \"Piece\",\n  \"weightedAvgCost\": 12.5,\n  \"wholesaleSellingPrice\": 18,\n  \"retailSellingPrice\": 24,\n  \"minAllowedSellingPrice\": 15,\n  \"vatRate\": 15,\n  \"units\": [\n    {\n      \"unitNameAr\": \"حبة\",\n      \"unitNameEn\": \"Piece\",\n      \"conversionFactor\": 1,\n      \"barcode\": \"6281000001001\",\n      \"wholesalePrice\": 18,\n      \"retailPrice\": 24,\n      \"minAllowedPrice\": 15,\n      \"isDefaultUnit\": true\n    },\n    {\n      \"unitNameAr\": \"كرتون 12 حبة\",\n      \"unitNameEn\": \"Carton (12x)\",\n      \"conversionFactor\": 12,\n      \"barcode\": \"6281000001012\",\n      \"wholesalePrice\": 210,\n      \"retailPrice\": 276,\n      \"minAllowedPrice\": 180,\n      \"isDefaultUnit\": false\n    }\n  ]\n}",
+              "raw": "{\n  \"sku\": \"ALM-SHMP-400\",\n  \"barcode\": \"6281000001001\",\n  \"nameAr\": \"شامبو المومياء 400 مل\",\n  \"nameEn\": \"AlMomiaa Shampoo 400ml\",\n  \"categoryId\": {{categoryId}},\n  \"brandId\": {{brandId}},\n  \"baseUnit\": \"Piece\",\n  \"weightedAvgCost\": 12.5,\n  \"wholesaleSellingPrice\": 18,\n  \"retailSellingPrice\": 24,\n  \"minAllowedSellingPrice\": 15,\n  \"vatRate\": 15,\n  \"units\": [\n    {\n      \"unitNameAr\": \"حبة\",\n      \"unitNameEn\": \"Piece\",\n      \"conversionFactor\": 1,\n      \"barcode\": \"6281000001001\",\n      \"wholesalePrice\": 18,\n      \"retailPrice\": 24,\n      \"minAllowedPrice\": 15,\n      \"isDefaultUnit\": true\n    },\n    {\n      \"unitNameAr\": \"كرتون 12 حبة\",\n      \"unitNameEn\": \"Carton (12x)\",\n      \"conversionFactor\": 12,\n      \"barcode\": \"6281000001012\",\n      \"wholesalePrice\": 210,\n      \"retailPrice\": 276,\n      \"minAllowedPrice\": 180,\n      \"isDefaultUnit\": false\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -981,7 +1115,7 @@
             "description": "Requires `inventory:transfer`. Run after receiving goods via Folder 06 GRN so source warehouse has available stock. Saves `{{transferId}}` and `{{transferItemId}}`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"transferNumber\": null,\n  \"sourceWarehouseId\": \"{{warehouseId}}\",\n  \"destinationWarehouseId\": \"{{branchWarehouseId}}\",\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"requestedQty\": 10,\n      \"dispatchedQty\": 10\n    }\n  ]\n}",
+              "raw": "{\n  \"transferNumber\": null,\n  \"sourceWarehouseId\": {{warehouseId}},\n  \"destinationWarehouseId\": {{branchWarehouseId}},\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"requestedQty\": 10,\n      \"dispatchedQty\": 10\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1218,7 +1352,7 @@
             "description": "Requires `procurement:manage`. `orderType`: `ContainerImport` or `LocalSupplierOrder`. Increments `IncomingQty`. Saves `{{purchaseOrderId}}`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"supplierId\": \"{{supplierId}}\",\n  \"targetWarehouseId\": \"{{warehouseId}}\",\n  \"orderType\": \"ContainerImport\",\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"orderedQty\": 100,\n      \"unitCostSAR\": 11.5\n    }\n  ]\n}",
+              "raw": "{\n  \"supplierId\": \"{{supplierId}}\",\n  \"targetWarehouseId\": {{warehouseId}},\n  \"orderType\": \"ContainerImport\",\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"orderedQty\": 100,\n      \"unitCostSAR\": 11.5\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1338,7 +1472,7 @@
             "description": "Requires `procurement:receive`. Recalculates `MasterProduct.WeightedAvgCost`, increments `PhysicalQty`, decrements `IncomingQty`, updates supplier payable, and appends `GoodsReceipt` StockMovement.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"purchaseOrderId\": \"{{purchaseOrderId}}\",\n  \"containerId\": \"{{containerId}}\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"receivedQty\": 100,\n      \"allocatedLandedUnitCostSAR\": 14,\n      \"lotNumber\": \"LOT-2026-A1\",\n      \"expiryDate\": \"2028-12-31\"\n    }\n  ]\n}",
+              "raw": "{\n  \"purchaseOrderId\": \"{{purchaseOrderId}}\",\n  \"containerId\": \"{{containerId}}\",\n  \"warehouseId\": {{warehouseId}},\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"receivedQty\": 100,\n      \"allocatedLandedUnitCostSAR\": 14,\n      \"lotNumber\": \"LOT-2026-A1\",\n      \"expiryDate\": \"2028-12-31\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1392,7 +1526,7 @@
             "description": "Requires `orders:create` and `X-Idempotency-Key` GUID header. Evaluates tier/floor pricing, 24h soft stock reservation, shortage warnings, and credit-limit co-approval flags. Saves `{{orderId}}` and `{{orderItemId}}`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"orderChannel\": \"PreSales\",\n  \"customerId\": \"{{customerId}}\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"productUnitId\": \"{{productUnitId}}\",\n      \"orderedQty\": 5,\n      \"unitPrice\": 18\n    }\n  ]\n}",
+              "raw": "{\n  \"orderChannel\": \"PreSales\",\n  \"customerId\": \"{{customerId}}\",\n  \"warehouseId\": {{warehouseId}},\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"productUnitId\": \"{{productUnitId}}\",\n      \"orderedQty\": 5,\n      \"unitPrice\": 18\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1659,7 +1793,7 @@
             "description": "Requires `settings:manage`. Run before Confirm Shipment! Initializes ICV=0 and initial PIH (`SHA256(\"0\")`). Saves `{{egsDeviceId}}`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"egsDeviceId\": \"EGS-RYD-WH01\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"certificateSerial\": \"ZATCA-CERT-2026-0001\"\n}",
+              "raw": "{\n  \"egsDeviceId\": \"EGS-RYD-WH01\",\n  \"warehouseId\": {{warehouseId}},\n  \"certificateSerial\": \"ZATCA-CERT-2026-0001\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1760,7 +1894,7 @@
             "description": "Requires `delivery:dispatch`. Assigns one or more invoices to a driver/rep. Saves `{{dispatchId}}`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"driverOrRepId\": \"{{currentUserId}}\",\n  \"vehiclePlateNumber\": \"RYD 4589\",\n  \"invoiceIds\": [\n    \"{{invoiceId}}\"\n  ]\n}",
+              "raw": "{\n  \"warehouseId\": {{warehouseId}},\n  \"driverOrRepId\": \"{{currentUserId}}\",\n  \"vehiclePlateNumber\": \"RYD 4589\",\n  \"invoiceIds\": [\n    \"{{invoiceId}}\"\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1842,7 +1976,7 @@
             "description": "Requires `sales:returns`. Issues ZATCA Credit Note with next monotonic ICV, credits customer balance, and restocks sellable units (`isSellableRestock: true`).",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"originalInvoiceId\": \"{{invoiceId}}\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"returnReason\": \"تلف عبوة أثناء النقل - مرتجع جزئي\",\n  \"egsDeviceId\": \"{{egsDeviceId}}\",\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"productUnitId\": \"{{productUnitId}}\",\n      \"returnedQty\": 1,\n      \"isSellableRestock\": true,\n      \"unitPrice\": 18.5\n    }\n  ]\n}",
+              "raw": "{\n  \"originalInvoiceId\": \"{{invoiceId}}\",\n  \"warehouseId\": {{warehouseId}},\n  \"returnReason\": \"تلف عبوة أثناء النقل - مرتجع جزئي\",\n  \"egsDeviceId\": \"{{egsDeviceId}}\",\n  \"items\": [\n    {\n      \"masterProductId\": \"{{productId}}\",\n      \"productUnitId\": \"{{productUnitId}}\",\n      \"returnedQty\": 1,\n      \"isSellableRestock\": true,\n      \"unitPrice\": 18.5\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"

@@ -24,9 +24,13 @@
 | `POST` | `/auth/refresh` | Public (`[AllowAnonymous]`, cookie-authenticated) | Empty request body. Validates trusted origin (`403` on cross-site untrusted origin), atomically rotates the `almomiaa_refresh` cookie, revokes the entire session family on replay/expiry/stamp mismatch, and returns the same `AuthenticationResponse` JSON as login. Clears cookie and returns `401` ProblemDetails on invalid session (`503` if Redis security-stamp store is unavailable). |
 | `POST` | `/auth/logout` | Public (`[AllowAnonymous]`, cookie-authenticated, idempotent) | Validates trusted origin (`403` on untrusted origin), revokes the current refresh-session family when a valid cookie is present, always clears the `almomiaa_refresh` cookie (`Max-Age=0`), and returns `204 No Content`. |
 | `GET` | `/users` | `users:manage` | Paginated list of employees, roles, rep types, and assigned warehouses/vans. |
+| `GET` | `/users/{id}` | `users:manage` | Employee detail profile including assigned roles, assigned warehouses, and computed effective permissions. |
 | `POST` | `/users` | `users:manage` | Creates user and auto-initializes `RepCustodyWallet` (and optional `MobileVan` warehouse) if `SALES_REP`. |
 | `PATCH` | `/users/{id}/status` | `users:manage` | Activates or deactivates an employee account and rotates `SecurityStamp` on deactivation. |
-| `GET` | `/roles` | `permissions:manage` | Lists all 7 canonical roles and their assigned permission claims. |
+| `PUT` | `/users/{id}/roles` | `permissions:manage` | Replaces roles assigned to a user (`SUPER_ADMIN` only) and rotates `SecurityStamp`. |
+| `PUT` | `/users/{id}/warehouses` | `users:manage` | Replaces assigned warehouses and default warehouse for a user and rotates `SecurityStamp`. |
+| `GET` | `/roles` | `permissions:manage` | Lists all canonical and custom roles and their assigned permission claims. |
+| `POST` | `/roles` | `permissions:manage` | Creates a custom role (`SUPER_ADMIN` only) with a validated subset of canonical permission claims. |
 | `PUT` | `/roles/{roleId}/permissions` | `permissions:manage` | Updates role permission claims (`SUPER_ADMIN` only) and rotates `SecurityStamp` for affected users. |
 
 #### Authentication Contracts (`/openapi/v1.json`, mirrored in `@almomiaa/api-client`)

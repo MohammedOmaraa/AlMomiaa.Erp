@@ -2,6 +2,7 @@
   <PropertyGroup>
     <AssemblyName>AlMomiaa.WebApi</AssemblyName>
     <RootNamespace>AlMomiaa.WebApi</RootNamespace>
+    <UserSecretsId>almomiaa-erp-webapi-dev</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\AlMomiaa.Application\AlMomiaa.Application.csproj" />

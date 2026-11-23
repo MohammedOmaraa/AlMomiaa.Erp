@@ -71,6 +71,18 @@ public sealed class IamModuleService(
         return new PagedResult<UserSummaryDto>(items, total, nextCursor);
     }
 
+    public async Task<UserDetailDto> GetUserByIdAsync(Guid userId, CancellationToken ct)
+    {
+        var user = await db.Users
+            .AsNoTracking()
+            .Include(u => u.Roles).ThenInclude(ur => ur.Role).ThenInclude(r => r.Permissions)
+            .Include(u => u.Warehouses)
+            .FirstOrDefaultAsync(u => u.Id == userId, ct)
+            ?? throw new NotFoundException("User", userId);
+
+        return MapUserDetail(user);
+    }
+
     public async Task<UserSummaryDto> CreateUserAsync(CreateUserCommand command, CancellationToken ct)
     {
         var req = command.Request;
@@ -205,6 +217,72 @@ public sealed class IamModuleService(
             user.Warehouses.Select(w => w.WarehouseId).ToArray());
     }
 
+    public async Task<UserDetailDto> UpdateUserRolesAsync(UpdateUserRolesCommand command, CancellationToken ct)
+    {
+        var user = await db.Users
+            .Include(u => u.Roles).ThenInclude(ur => ur.Role).ThenInclude(r => r.Permissions)
+            .Include(u => u.Warehouses)
+            .FirstOrDefaultAsync(u => u.Id == command.UserId, ct)
+            ?? throw new NotFoundException("User", command.UserId);
+
+        var nextRoleIds = command.RoleIds.Distinct().ToArray();
+        var roles = await db.Roles
+            .Include(r => r.Permissions)
+            .Where(r => nextRoleIds.Contains(r.Id))
+            .ToListAsync(ct);
+
+        if (roles.Count != nextRoleIds.Length)
+        {
+            throw new NotFoundException("Role", string.Join(',', nextRoleIds));
+        }
+
+        var oldRoleCodes = user.Roles.Select(ur => ur.Role.RoleCode).OrderBy(x => x).ToArray();
+        var newRoleCodes = roles.Select(r => r.RoleCode).OrderBy(x => x).ToArray();
+
+        user.ReplaceRoles(nextRoleIds);
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        AuditAndOutboxHelper.AppendAudit(db, currentUser, "UpdateUserRoles", "User", user.Id.ToString("D"), oldRoleCodes, newRoleCodes, now);
+        await db.SaveChangesAsync(ct);
+        await securityStampStore.InvalidateAsync(user.Id, ct);
+
+        return await GetUserByIdAsync(user.Id, ct);
+    }
+
+    public async Task<UserDetailDto> UpdateUserWarehousesAsync(UpdateUserWarehousesCommand command, CancellationToken ct)
+    {
+        var user = await db.Users
+            .Include(u => u.Roles).ThenInclude(ur => ur.Role).ThenInclude(r => r.Permissions)
+            .Include(u => u.Warehouses)
+            .FirstOrDefaultAsync(u => u.Id == command.UserId, ct)
+            ?? throw new NotFoundException("User", command.UserId);
+
+        var merged = command.AssignedWarehouseIds.Distinct().ToList();
+        if (command.DefaultWarehouseId.HasValue && !merged.Contains(command.DefaultWarehouseId.Value))
+        {
+            merged.Add(command.DefaultWarehouseId.Value);
+        }
+
+        if (merged.Count > 0)
+        {
+            var foundCount = await db.Warehouses.AsNoTracking().CountAsync(w => merged.Contains(w.Id), ct);
+            if (foundCount != merged.Count)
+            {
+                throw new NotFoundException("Warehouse", string.Join(',', merged));
+            }
+        }
+
+        var oldState = new { user.DefaultWarehouseId, Warehouses = user.Warehouses.Select(w => w.WarehouseId).OrderBy(x => x).ToArray() };
+        user.ReplaceWarehouses(merged, command.DefaultWarehouseId);
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        AuditAndOutboxHelper.AppendAudit(db, currentUser, "UpdateUserWarehouses", "User", user.Id.ToString("D"), oldState, new { user.DefaultWarehouseId, Warehouses = merged.OrderBy(x => x).ToArray() }, now);
+        await db.SaveChangesAsync(ct);
+        await securityStampStore.InvalidateAsync(user.Id, ct);
+
+        return await GetUserByIdAsync(user.Id, ct);
+    }
+
     public async Task<IReadOnlyList<RoleDto>> GetRolesAsync(CancellationToken ct)
     {
         return await db.Roles
@@ -218,6 +296,48 @@ public sealed class IamModuleService(
                 r.Permissions.Select(p => p.PermissionClaim).OrderBy(c => c).ToArray()))
             .ToListAsync(ct);
     }
+
+    public async Task<RoleDto> CreateRoleAsync(CreateRoleCommand command, CancellationToken ct)
+    {
+        var req = command.Request;
+        var normalizedCode = req.RoleCode.Trim().ToUpperInvariant();
+        if (await db.Roles.AsNoTracking().AnyAsync(r => r.RoleCode == normalizedCode, ct))
+        {
+            throw new ConflictException($"RoleCode '{normalizedCode}' already exists.");
+        }
+
+        var role = Role.CreateCustom(normalizedCode, req.NameAr, req.NameEn);
+        db.Roles.Add(role);
+        await db.SaveChangesAsync(ct);
+
+        var claims = req.Permissions.Select(p => p.Trim()).Distinct(StringComparer.Ordinal).OrderBy(x => x).ToArray();
+        foreach (var claim in claims)
+        {
+            db.RolePermissions.Add(RolePermission.Create(role.Id, claim));
+        }
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        AuditAndOutboxHelper.AppendAudit(db, currentUser, "CreateRole", "Role", role.Id.ToString(), null, new { role.RoleCode, Permissions = claims }, now);
+        await db.SaveChangesAsync(ct);
+
+        return new RoleDto(role.Id, role.RoleCode, role.NameAr, role.NameEn, claims);
+    }
+
+    private static UserDetailDto MapUserDetail(User user) =>
+        new(
+            user.Id,
+            user.EmployeeCode,
+            user.FullNameAr,
+            user.FullNameEn,
+            user.Phone,
+            user.Email,
+            user.RepType,
+            user.DefaultWarehouseId,
+            user.IsActive,
+            user.CreatedAtUtc,
+            user.Roles.Select(ur => ur.Role.RoleCode).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToArray(),
+            user.Warehouses.Select(w => w.WarehouseId).Distinct().OrderBy(x => x).ToArray(),
+            user.Roles.SelectMany(ur => ur.Role.Permissions).Select(p => p.PermissionClaim).Distinct(StringComparer.Ordinal).OrderBy(x => x).ToArray());
 
     public async Task<RoleDto> UpdateRolePermissionsAsync(UpdateRolePermissionsCommand command, CancellationToken ct)
     {

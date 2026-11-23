@@ -26,4 +26,18 @@ public sealed class Role
             NameEn = nameEn.Trim()
         };
     }
+
+    public static Role CreateCustom(string roleCode, string nameAr, string nameEn)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(roleCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(nameAr);
+        ArgumentException.ThrowIfNullOrWhiteSpace(nameEn);
+
+        return new Role
+        {
+            RoleCode = roleCode.Trim().ToUpperInvariant(),
+            NameAr = nameAr.Trim(),
+            NameEn = nameEn.Trim()
+        };
+    }
 }

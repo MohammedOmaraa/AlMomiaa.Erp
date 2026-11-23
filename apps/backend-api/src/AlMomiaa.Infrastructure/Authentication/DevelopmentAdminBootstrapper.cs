@@ -32,21 +32,28 @@ public static class DevelopmentAdminBootstrapper
         var normalizedCode = AuthenticationService.NormalizeEmployeeCode(code);
         var normalizedPhone = AuthenticationService.NormalizePhone(phone);
 
-        var exists = await dbContext.Users
-            .AsNoTracking()
-            .AnyAsync(u => u.EmployeeCode == normalizedCode || u.Phone == normalizedPhone, cancellationToken);
-
-        if (exists)
-        {
-            return;
-        }
-
         var superAdminRole = await dbContext.Roles
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.RoleCode == CanonicalRolesAndPermissions.Roles.SuperAdmin, cancellationToken);
 
         if (superAdminRole is null)
         {
+            return;
+        }
+
+        var existingUser = await dbContext.Users
+            .Include(u => u.Roles)
+            .FirstOrDefaultAsync(u => u.EmployeeCode == normalizedCode || u.Phone == normalizedPhone, cancellationToken);
+
+        if (existingUser is not null)
+        {
+            if (!existingUser.IsActive)
+            {
+                existingUser.Activate();
+            }
+
+            existingUser.AssignRole(superAdminRole.Id);
+            await dbContext.SaveChangesAsync(cancellationToken);
             return;
         }
 

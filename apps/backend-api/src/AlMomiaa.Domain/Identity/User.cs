@@ -94,4 +94,33 @@ public sealed class User
         DefaultWarehouseId = warehouseId;
         AssignWarehouse(warehouseId);
     }
+
+    public void ReplaceRoles(IEnumerable<int> roleIds)
+    {
+        Roles.Clear();
+        foreach (var roleId in roleIds.Distinct())
+        {
+            Roles.Add(UserRole.Create(Id, roleId));
+        }
+
+        RotateSecurityStamp();
+    }
+
+    public void ReplaceWarehouses(IEnumerable<int> warehouseIds, int? defaultWarehouseId)
+    {
+        Warehouses.Clear();
+        var merged = warehouseIds.Distinct().ToList();
+        if (defaultWarehouseId.HasValue && !merged.Contains(defaultWarehouseId.Value))
+        {
+            merged.Add(defaultWarehouseId.Value);
+        }
+
+        foreach (var warehouseId in merged)
+        {
+            Warehouses.Add(UserWarehouse.Create(Id, warehouseId));
+        }
+
+        DefaultWarehouseId = defaultWarehouseId;
+        RotateSecurityStamp();
+    }
 }

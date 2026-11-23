@@ -40,7 +40,8 @@ if (string.IsNullOrWhiteSpace(issuer)
     || Encoding.UTF8.GetByteCount(signingKey) < 32)
 {
     throw new InvalidOperationException(
-        "Auth:Jwt configuration (Issuer, Audience, and a SigningKey of at least 32 UTF-8 bytes) is required.");
+        "Auth:Jwt configuration (Issuer, Audience, and a SigningKey of at least 32 UTF-8 bytes) is required. " +
+        "In Development, configure them via 'dotnet user-secrets set \"Auth:Jwt:SigningKey\" \"<32+ chars>\"' or environment variables.");
 }
 
 if (builder.Environment.IsProduction() && configuredOrigins.Length == 0)
