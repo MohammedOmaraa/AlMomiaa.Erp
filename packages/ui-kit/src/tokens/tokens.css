@@ -1,0 +1,73 @@
+:root {
+  color-scheme: light;
+
+  /* Brand Gold */
+  --brand-gold-primary: #CFA434;
+  --brand-gold-hover: #B88E24;
+  --brand-gold-light: #F5EED8;
+  --brand-gold-metallic: #D4AF37;
+
+  /* Surfaces */
+  --surface-obsidian: #1C1B1A;
+  --surface-charcoal: #262523;
+  --surface-canvas: #F8F7F4;
+  --surface-card: #FFFFFF;
+  --surface-border: #E5E1D8;
+  --surface-hover: #F5EED8;
+  --surface-skeleton: #E5E1D8;
+
+  /* Typography */
+  --text-primary: #1C1B1A;
+  --text-secondary: #5C5852;
+  --text-inverse: #F8F7F4;
+  --text-inverse-muted: #E5E1D8;
+
+  /* Focus */
+  --focus-ring: #B88E24;
+
+  /* Semantic ERP Status */
+  --status-success-bg: #E8F5EE;
+  --status-success-fg: #156F42;
+  --status-warning-bg: #F5EED8;
+  --status-warning-fg: #8C6812;
+  --status-danger-bg: #FDECEC;
+  --status-danger-fg: #B42318;
+  --status-danger-action-bg: #B42318;
+  --status-info-bg: #EAF2FB;
+  --status-info-fg: #175CD3;
+
+  /* Font Stacks */
+  --font-arabic: 'IBM Plex Sans Arabic', 'Cairo', sans-serif;
+  --font-latin: 'Inter', 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-canvas: #1C1B1A;
+  --surface-card: #262523;
+  --surface-border: #5C5852;
+  --surface-hover: #1C1B1A;
+  --surface-skeleton: #5C5852;
+  --text-primary: #F8F7F4;
+  --text-secondary: #E5E1D8;
+  --text-inverse: #F8F7F4;
+  --text-inverse-muted: #E5E1D8;
+  --focus-ring: #CFA434;
+  --status-success-bg: #262523;
+  --status-success-fg: #E8F5EE;
+  --status-warning-bg: #262523;
+  --status-warning-fg: #F5EED8;
+  --status-danger-bg: #262523;
+  --status-danger-fg: #FDECEC;
+  --status-info-bg: #262523;
+  --status-info-fg: #EAF2FB;
+}
+
+[dir="rtl"] {
+  font-family: var(--font-arabic);
+}
+
+[dir="ltr"] {
+  font-family: var(--font-latin);
+}

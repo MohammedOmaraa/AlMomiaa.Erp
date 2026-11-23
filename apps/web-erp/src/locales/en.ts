@@ -1,0 +1,18 @@
+export const en = {
+  dashboard: "Dashboard",
+  welcome: "Welcome to AlMomiaa",
+  preview: "Illustrative dashboard preview",
+  illustrative: "Illustrative values only — not connected to live data",
+  sales: "Sales",
+  customers: "Customers",
+  inventory: "Inventory",
+  purchasing: "Purchasing",
+  finance: "Finance",
+  reports: "Reports",
+  settings: "Settings",
+  soon: "Soon",
+  placeholder: "Disabled section — available after future integration",
+  sampleActivity: "Illustrative activity",
+  activityValue: "No real business data is loaded at this stage; this workspace previews the shell layout only.",
+  brand: "AlMomiaa",
+} as const;

@@ -1,10 +1,13 @@
-﻿import type { Config } from "tailwindcss";
+import type { Config } from "tailwindcss";
+import preset from "@almomiaa/ui/tailwind.preset";
 
 const config: Config = {
-  content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
-  theme: {
-    extend: {},
-  },
+  presets: [preset],
+  content: [
+    "./src/**/*.{js,ts,jsx,tsx,mdx}",
+    "../../packages/ui-kit/src/**/*.{ts,tsx}",
+    "../../packages/ui-kit/dist/**/*.js",
+  ],
   plugins: [],
 };
 

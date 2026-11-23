@@ -1,0 +1,23 @@
+{
+  "name": "almomiaa-erp-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.21.0",
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test --continue",
+    "build-storybook": "turbo run build-storybook --filter=@almomiaa/design-system-studio"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "@typescript-eslint/eslint-plugin": "7.18.0",
+    "@typescript-eslint/parser": "7.18.0",
+    "eslint": "8.57.1",
+    "eslint-plugin-react": "7.37.5",
+    "eslint-plugin-react-hooks": "5.2.0",
+    "turbo": "2.5.8",
+    "typescript": "5.8.3"
+  }
+}

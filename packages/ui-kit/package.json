@@ -1,0 +1,40 @@
+{
+  "name": "@almomiaa/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "src/tokens/tokens.css"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./tailwind.preset": "./tailwind.preset.ts",
+    "./tokens.css": "./src/tokens/tokens.css",
+    "./assets/almomiaa-logo.jpg": "./src/assets/almomiaa-logo.jpg"
+  },
+  "files": [
+    "dist",
+    "src/assets/almomiaa-logo.jpg",
+    "src/tokens/tokens.css",
+    "tailwind.preset.ts"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "react": ">=18.2.0",
+    "tailwindcss": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.8",
+    "typescript": "5.8.3",
+    "tailwindcss": "3.4.17"
+  }
+}

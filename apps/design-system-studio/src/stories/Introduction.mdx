@@ -1,0 +1,19 @@
+import { Meta } from "@storybook/blocks";
+
+<Meta title="Introduction" />
+
+# AlMomiaa Design System
+
+A bilingual, RTL-first component library for AlMomiaa Trading Co. Shared React primitives and brand tokens live in `@almomiaa/ui`.
+
+## Brand and tokens
+
+Import `@almomiaa/ui/tokens.css` once at the app root. Consume mapped tokens such as `bg-brand-gold`, `bg-surface-obsidian`, `text-text-primary`, and semantic `status-*` colors instead of defining local colors. Gold primary controls pair with obsidian text; dark surfaces pair inverse text with gold accents.
+
+## Direction and typography
+
+Use `dir="rtl"` and the Arabic font stack for Arabic content, or `dir="ltr"` and the Latin stack for English. Prefer logical inline spacing, borders, alignment, and placement. Each component's ArabicRTL and EnglishLTR stories demonstrate direction handling.
+
+## Themes and responsive previews
+
+Use the Theme toolbar to preview the light and dark token sets. The viewport toolbar provides 375px mobile, 768px tablet, and 1280px desktop previews. ResponsiveAppShell also documents desktop navigation, the medium compact rail, and mobile drawer states.
