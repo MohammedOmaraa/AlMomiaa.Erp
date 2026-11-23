@@ -1,4 +1,5 @@
 ﻿using AlMomiaa.Domain.Identity;
+using AlMomiaa.Domain.Inventory;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -98,6 +99,12 @@ public sealed class UserWarehouseConfiguration : IEntityTypeConfiguration<UserWa
             .WithMany(x => x.Warehouses)
             .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne<Warehouse>()
+            .WithMany()
+            .HasForeignKey(x => x.WarehouseId)
+            .HasConstraintName("FK_UserWarehouses_Warehouse")
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
 

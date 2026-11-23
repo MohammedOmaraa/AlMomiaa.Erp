@@ -73,7 +73,7 @@ CREATE SCHEMA [inv];   -- Multi-Warehouse Stocks (including Mobile Vans), Moveme
 CREATE SCHEMA [proc];  -- Suppliers, Purchase Orders, Containers & Goods Receipts
 CREATE SCHEMA [sales]; -- Sales Orders, ZATCA Invoices, Sequence Lock, Returns & Delivery Dispatches
 CREATE SCHEMA [fin];   -- Financial Accounts, Collections, Allocations, Fiscal Periods, Ledger & Snapshots
-CREATE SCHEMA [sys];   -- Audit Logs, Outbox Messages & GPS Telemetry
+CREATE SCHEMA [ops];   -- Audit Logs, Outbox Messages & GPS Telemetry (replaces reserved SQL Server [sys] schema)
 GO
 ```
 
@@ -665,10 +665,11 @@ CREATE TABLE [fin].[DailyFinancialSnapshots] (
 );
 ```
 
-### 2.9 Audit Log, Transactional Outbox & Future GPS Schema (`[sys]`)
+### 2.9 Audit Log, Transactional Outbox & Future GPS Schema (`[ops]`)
+> Note: SQL Server reserves the built-in `[sys]` schema for system catalog views (Error 2760 prohibits user tables in `[sys]`). Therefore, operational system tables use `[ops]`.
 ```sql
 -- Partitioned monthly by TimestampUtc
-CREATE TABLE [sys].[AuditLogs] (
+CREATE TABLE [ops].[AuditLogs] (
     Id BIGINT IDENTITY(1,1) NOT NULL,
     UserId UNIQUEIDENTIFIER NOT NULL,
     UserRole NVARCHAR(50) NOT NULL,
@@ -683,7 +684,7 @@ CREATE TABLE [sys].[AuditLogs] (
 );
 
 -- Transactional Outbox for SignalR, ZATCA Clearance/Reporting & SMS OTP
-CREATE TABLE [sys].[OutboxMessages] (
+CREATE TABLE [ops].[OutboxMessages] (
     Id UNIQUEIDENTIFIER PRIMARY KEY,                         -- UUIDv7
     MessageType NVARCHAR(150) NOT NULL,
     PayloadJson NVARCHAR(MAX) NOT NULL,
@@ -695,7 +696,7 @@ CREATE TABLE [sys].[OutboxMessages] (
 );
 
 -- Partitioned monthly by RecordedAtUtc (Feature-Flagged GPS Telemetry)
-CREATE TABLE [sys].[GpsRouteHistory] (
+CREATE TABLE [ops].[GpsRouteHistory] (
     Id BIGINT IDENTITY(1,1) NOT NULL,
     RepId UNIQUEIDENTIFIER NOT NULL REFERENCES [id].[Users](Id),
     Latitude DECIMAL(9,6) NOT NULL,

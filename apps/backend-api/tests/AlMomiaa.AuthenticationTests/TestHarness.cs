@@ -145,6 +145,15 @@ public sealed class AuthWebApplicationFactory : WebApplicationFactory<Program>
                 UPDATE RefreshTokenSessions SET RowVersion = randomblob(8) WHERE rowid = NEW.rowid;
             END;
             """);
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            INSERT OR IGNORE INTO Warehouses (Id, WarehouseCode, NameAr, NameEn, WarehouseType, City, IsActive) VALUES
+                (1, 'WH-01', 'المستودع الرئيسي', 'Main Warehouse', 'MainWarehouse', 'Riyadh', 1),
+                (2, 'WH-02', 'مستودع الفرع', 'Branch Warehouse', 'BranchWarehouse', 'Riyadh', 1),
+                (4, 'WH-04', 'مستودع جدة', 'Jeddah Warehouse', 'BranchWarehouse', 'Jeddah', 1),
+                (5, 'WH-05', 'مستودع الدمام', 'Dammam Warehouse', 'BranchWarehouse', 'Dammam', 1),
+                (7, 'WH-07', 'سيارة التوزيع', 'Mobile Van 1', 'MobileVan', 'Riyadh', 1);
+            """);
         await IdentitySeedData.EnsureCanonicalRolesAndPermissionsAsync(db);
     }
 

@@ -1,286 +1,139 @@
-# PROMPT-0003: Implement User Authentication, Session Persistence, and Login UI
+# PROMPT-0004: Provision `AlMomiaa` SQL Server Database and Full Canonical ERP Schema via EF Core 9 Migrations
+
+- **Status:** `COMPLETED (Archived as 0004-provision-sqlserver-almomiaa-database.md)`
+- **Prompt ID:** `PROMPT-0004`
+- **Scope:** `apps/backend-api` (`AlMomiaa.Domain`, `AlMomiaa.Infrastructure`, and `tests/`) and local Microsoft SQL Server provisioning (`AlMomiaa` database)
+- **Reference baseline:** Architecture v3.1 (`docs/architecture/00-ADR-Architecture-Decisions.md`, `docs/architecture/05-Database.md`, `docs/architecture/07-Security.md`); `PROMPT-0001`..`PROMPT-0003` completed
+- **Confirmed decisions:**
+  - Full canonical ERP schema: all **8 schemas** (`[id]`, `[cat]`, `[cust]`, `[inv]`, `[proc]`, `[sales]`, `[fin]`, `[sys]`) and all **44 tables** from `05-Database.md`.
+  - Provisioning mechanism: **EF Core 9 migrations** on `AlMomiaaDbContext` + `dotnet ef database update` so EF Core model snapshot, `__EFMigrationsHistory`, and SQL Server stay 100% synchronized.
+  - Target SQL Server instance: local default instance (`Server=localhost;Database=AlMomiaa;Trusted_Connection=True;TrustServerCertificate=True;`), supplied via environment variable at execution time (never committed into source control).
+  - Seeds & partitioning: canonical reference seeds only (`[id].[Roles]`, `[id].[RolePermissions]`, `[cust].[CustomerGrades]` A/B/C/D) + partition-ready clustered `(DateUtc, Id)` primary keys on append-only tables; **no default users or passwords**.
+
+---
+
+## 1. Purpose of Prompt
+
+Model the remaining 7 canonical ERP bounded-context schemas (`[cat]`, `[cust]`, `[inv]`, `[proc]`, `[sales]`, `[fin]`, `[sys]`) in `AlMomiaa.Domain` and `AlMomiaa.Infrastructure`, generate a clean EF Core 9 SQL Server migration building on top of the existing `[id]` migration (`20261123063607_InitialIdentityAndRefreshSessions`), and provision the **`AlMomiaa`** database and all **44 tables** in the local Microsoft SQL Server instance via `dotnet ef database update`.
+
+This prompt covers **domain entity modeling, EF Core 9 configurations, SQL Server migrations, database creation/migration execution, and schema verification tests only**. Do not add new HTTP endpoints, CQRS feature handlers, frontend pages, UI components, or seeded user accounts.
+
+---
+
+## 2. Target Execution Agents and Order
+
+1. **`@Backend .NET`** — implement the pure Domain entities for `[cat]`, `[cust]`, `[inv]`, `[proc]`, `[sales]`, `[fin]`, and `[sys]`; add EF Core 9 `IEntityTypeConfiguration<T>` mappings and `DbSet<T>` properties to `AlMomiaaDbContext`; generate the additive EF Core migration `AddFullErpSchema`; apply all migrations to the local Microsoft SQL Server `AlMomiaa` database; verify live SQL Server schemas/tables/constraints/seeds; and add backend schema & architecture verification tests.
+2. **`@QA & Security Auditor`** — verify 1:1 fidelity with `docs/architecture/05-Database.md`, Clean Architecture purity (`AlMomiaa.Domain` zero external references), zero committed secrets/connection strings, zero seeded users/passwords, live SQL Server verification results, and full solution build/test pass.
+3. **`@Orchestrator`** — coordinate execution and archive/log only after QA returns `PASS`.
 
-- **Status:** `COMPLETED (Archived as 0003-user-authentication-and-login.md)`
-- **Prompt ID:** `PROMPT-0003`
-- **Scope:** `apps/backend-api`, `packages/api-client`, `packages/ui-kit` (auth form controls and stories), `apps/web-erp`, and synchronized auth documentation
-- **Reference baseline:** Architecture v3.1; `PROMPT-0001` and `PROMPT-0002` completed
-- **Confirmed decisions:** Login + refresh + logout; login by phone or employee code; no public registration; map the canonical identity schema and add refresh-session persistence; implement API + web login design + shared typed client/Zod contracts.
+Do not invoke `@Design System UI` or `@Frontend Engineer`; no frontend or design-system files are in scope.
 
-## 1. Purpose
+---
 
-Implement a secure, end-to-end authentication foundation for the existing AlMomiaa ERP:
+## 3. Target Files to Create / Modify
 
-- Persist canonical users, roles, permissions, and warehouse assignments in SQL Server through EF Core.
-- Implement login, refresh, and logout endpoints in the .NET 9 Web API.
-- Define precise backend request/response contracts and share their TypeScript equivalents with the web frontend through `@almomiaa/api-client`, using OpenAPI-aligned types and Zod validation.
-- Build a responsive, bilingual Arabic/English login experience consistent with the existing AlMomiaa UI design system.
-- Bootstrap the existing dashboard shell from the authenticated session without treating frontend navigation as an authorization boundary.
-
-This prompt does not include public registration, forgot/reset password, MFA/OTP, user administration screens/endpoints, or any unrelated ERP workflow.
-
-## 2. Architectural References and Existing Schema
-
-Before implementation, read and obey:
+Preserve all existing `[id]` entities, configurations, and migration `20261123063607_InitialIdentityAndRefreshSessions` without rewriting or breaking them.
 
-- `docs/architecture/00-ADR-Architecture-Decisions.md`
-- `docs/architecture/05-Database.md`
-- `docs/architecture/06-API-Specification.md`
-- `docs/architecture/07-Security.md`
-- `.github/skills/cqrs-efcore-patterns/SKILL.md`
-- `.github/skills/zatca-phase2-compliance/SKILL.md` only where shared backend conventions apply
-- `.github/skills/design-token-governance/SKILL.md`
-
-`05-Database.md` already defines `[id].[Users]`, `[id].[Roles]`, `[id].[RolePermissions]`, `[id].[UserRoles]`, and `[id].[UserWarehouses]`. Map these existing contracts instead of inventing a parallel user schema. Add only the session persistence needed for secure rotating refresh tokens, and update the database/API/security docs to match the implemented authentication contract.
-
-Preserve the mandated security semantics:
-
-- Access JWT lifetime: 10 minutes.
-- Refresh-session maximum lifetime: 14 days; rotate the refresh token on every successful refresh.
-- Web refresh token: opaque, host-only `HttpOnly`, `Secure`, `SameSite=Strict` cookie; never return it in JSON or expose it to JavaScript.
-- JWT context: `UserId`, `RoleCodes`, `RepType`, `DefaultWarehouseId`, `AssignedWarehouseIds`, `SecurityStamp`, and effective permission claims required by explicit API policies. Include the same effective role/permission/warehouse context in the authenticated session response.
-- Redis security-stamp validation and immediate revocation per `07-Security.md`.
-- Every future protected API endpoint continues to enforce server-side policies and row-level scoping.
-
-## 3. Target Execution Agents and Order
-
-1. **`@Backend .NET`** — implement canonical identity persistence, refresh-session persistence, authentication application services/handlers, JWT and refresh-cookie behavior, `AuthController`, and backend tests.
-2. **`@Design System UI`** — add only the reusable form controls required by login (for example `TextField` and `PasswordField`) to `packages/ui-kit`, with accessible props, tokens, and CSF3 stories.
-3. **`@Frontend Engineer`** — add request/response contracts and authenticated Axios session handling in `packages/api-client`, then implement the bilingual login page and session bootstrap in `apps/web-erp`.
-4. **`@QA & Security Auditor`** — audit API authorization/cookie/session security, schema alignment, contract consistency, accessibility, and all acceptance criteria. Fixes must be routed to the owning specialist and re-audited.
-5. **`@Orchestrator`** — coordinate handoffs and archive/log only after QA returns `PASS`.
-
-The Backend agent must publish the endpoint and OpenAPI contract before the Frontend agent finalizes client contracts. The Design System task may run in parallel with backend implementation.
-
-## 4. Database and Backend Implementation
-
-### 4.1 Identity persistence
-
-Create EF Core entities/configurations and migrations aligned to the existing `[id]` DDL:
-
-- `id.Users`: UUIDv7 primary key; unique employee code and phone; Arabic/English names; optional email; password hash; rep type; default warehouse; security stamp; active flag; created UTC timestamp.
-- `id.Roles` and `id.RolePermissions`: canonical role codes and permission claim names.
-- `id.UserRoles`: user-role join.
-- `id.UserWarehouses`: assigned warehouse join, maintaining the existing warehouse FK relationship when the inventory schema is present.
-- Seed the canonical role codes and permission claims from `07-Security.md` idempotently; never seed a production user or password.
-
-Do not silently rename columns, remove constraints, or duplicate role/permission data in a new schema. Use EF Core configurations and `.AsNoTracking()` for read projections. Keep the Domain independent of EF Core and ASP.NET Core.
-
-### 4.2 Refresh-session persistence
-
-Add a narrowly scoped table/entity such as `[id].[RefreshTokenSessions]` for rotation and revocation. It must:
-
-- Store only a cryptographic hash of each opaque random refresh token, never the raw token.
-- Associate sessions with a user and a session/family identifier; record issued, expiry, revoked timestamps and replacement/revocation relationships.
-- Enforce uniqueness for token hashes and add indexes supporting active-session lookup and user revocation.
-- Include optimistic concurrency protection for rotation/revocation.
-- Make rotation atomic. Detect reuse of a rotated/revoked token and revoke the affected session family; never mint a second valid token from the same refresh token.
-- Enforce a maximum 14-day session lifetime and bind each cookie token to its server-side session.
-
-Use secure cryptographic randomness and a constant-time hash comparison. Keep secrets/keys out of source control and migrations.
-
-### 4.3 Backend files to create/modify
-
-At minimum, place code within these existing Clean Architecture projects:
-
-- `apps/backend-api/src/AlMomiaa.Domain/Identity/User.cs`
-- `apps/backend-api/src/AlMomiaa.Domain/Identity/RefreshTokenSession.cs`
-- `apps/backend-api/src/AlMomiaa.Application/Authentication/Contracts/LoginRequest.cs`
-- `apps/backend-api/src/AlMomiaa.Application/Authentication/Contracts/AuthenticationResponse.cs`
-- `apps/backend-api/src/AlMomiaa.Application/Authentication/Contracts/AuthenticatedUserDto.cs`
-- `apps/backend-api/src/AlMomiaa.Application/Authentication/Contracts/RefreshRequest.cs` (empty body or no-body contract; refresh credential comes only from cookie)
-- `apps/backend-api/src/AlMomiaa.Application/Authentication/Commands/Login/*`
-- `apps/backend-api/src/AlMomiaa.Application/Authentication/Commands/RefreshSession/*`
-- `apps/backend-api/src/AlMomiaa.Application/Authentication/Commands/Logout/*`
-- `apps/backend-api/src/AlMomiaa.Application/Authentication/Abstractions/`
-- `apps/backend-api/src/AlMomiaa.Infrastructure/Persistence/AlMomiaaDbContext.cs`
-- `apps/backend-api/src/AlMomiaa.Infrastructure/Persistence/Configurations/Identity/*`
-- `apps/backend-api/src/AlMomiaa.Infrastructure/Persistence/Migrations/*`
-- `apps/backend-api/src/AlMomiaa.Infrastructure/Authentication/`
-- `apps/backend-api/src/AlMomiaa.Infrastructure/DependencyInjection.cs`
-- `apps/backend-api/src/AlMomiaa.WebApi/Controllers/AuthController.cs`
-- `apps/backend-api/src/AlMomiaa.WebApi/Program.cs`
-- `apps/backend-api/src/AlMomiaa.WebApi/appsettings.json` only for non-secret safe defaults; secrets and environment values come from configuration/environment.
-- `apps/backend-api/tests/` authentication unit/architecture/integration tests in the existing test project or a narrowly scoped new test project.
-
-The exact implementation may add small, directly related files (for example entity configurations, validators, options, or migration designer files) under these same projects.
-
-### 4.4 Security behavior
-
-- Hash passwords with a framework-maintained secure password hasher; never store or log plaintext passwords.
-- Validate the login identifier and password; normalize phone and employee-code lookups consistently with uniqueness constraints.
-- Return the same generic unauthorized response for unknown identifier, incorrect password, and inactive account; do not reveal which condition failed.
-- Apply bounded rate limiting/lockout to login attempts, keyed by appropriate client and identifier signals. Avoid permanent lockout denial-of-service; document the configured policy.
-- Configure and validate JWT issuer, audience, signing key, and expiry from configuration; fail safely when required production security configuration is absent. Never ship a default signing secret.
-- Implement Redis-backed `SecurityStamp` validation using `user:stamp:{userId}` and ensure user deactivation or stamp rotation invalidates active access tokens promptly.
-- Use explicit authorization metadata: login, refresh, and logout are intentionally public endpoints; all new non-auth endpoints remain protected by explicit permission policies.
-- Return RFC 7807 `ProblemDetails` errors without leaking passwords, token values, hashes, or user existence.
-- Configure credentialed CORS only for explicitly configured trusted frontend origins; never combine credentials with wildcard origins.
-- For the refresh cookie, set `HttpOnly`, `Secure`, `SameSite=Strict`, omit the `Domain` attribute, use the narrow `/api/v1/auth` path, and set the 14-day maximum expiry. Clear it on logout and failed/replayed refresh. Do not weaken production cookie policy for local HTTP.
-- Protect cookie-authenticated refresh/logout from cross-site requests with strict configured-origin validation (and an explicit anti-CSRF mechanism if the deployment topology requires it); never allow arbitrary origins with credentials.
-- Fail closed for protected requests if Redis security-stamp validation is unavailable; return an explicit service error rather than accepting a token without revocation verification.
-
-## 5. Canonical HTTP Contracts
-
-All routes use the existing `/api/v1` prefix and match `06-API-Specification.md`.
-
-### `POST /api/v1/auth/login` — public
-
-Request JSON:
-
-```json
-{
-  "identifier": "employee-code-or-phone",
-  "password": "user-supplied-password"
-}
-```
-
-Response JSON (refresh token is set only in `Set-Cookie`):
-
-```json
-{
-  "accessToken": "<short-lived-jwt>",
-  "tokenType": "Bearer",
-  "expiresIn": 600,
-  "user": {
-    "id": "01933c90-9999-7000-8000-abcdef123456",
-    "employeeCode": "EMP-0001",
-    "fullNameAr": "اسم المستخدم",
-    "fullNameEn": "User Name",
-    "roleCodes": ["SALES_MGR"],
-    "permissions": ["orders:approve"],
-    "repType": null,
-    "defaultWarehouseId": null,
-    "assignedWarehouseIds": []
-  }
-}
-```
-
-### `POST /api/v1/auth/refresh` — public, cookie-authenticated
-
-- Request body is empty; authenticate only from the refresh cookie.
-- Atomically rotate the refresh session and set a new cookie.
-- Return the same access-session response contract as login.
-- On invalid, expired, revoked, replayed, inactive-user, or security-stamp-invalid sessions: clear the cookie and return a safe RFC 7807 response.
-
-### `POST /api/v1/auth/logout` — public, cookie-authenticated and idempotent
-
-- Revoke the current refresh session/family when a valid cookie is present.
-- Always clear the refresh cookie and return `204 No Content`; do not disclose whether the cookie was valid.
-
-Use typed C# request/response DTOs in Application and keep the Controller thin. Publish the exact request, response, cookie, and error contracts through the Web API OpenAPI document.
-
-## 6. Shared Frontend Contract and API Client
-
-Create `packages/api-client` as the frontend’s only authentication HTTP boundary:
-
-- `packages/api-client/package.json`, strict `tsconfig.json`, and public `src/index.ts`.
-- `packages/api-client/src/auth/auth.types.ts` — TypeScript interfaces/types matching backend DTOs.
-- `packages/api-client/src/auth/auth.schemas.ts` — Zod request/response validation schemas.
-- `packages/api-client/src/auth/auth.service.ts` — login/refresh/logout API operations.
-- `packages/api-client/src/http/axios.ts` — configured Axios instance, credentials support, cancellation, and base URL from environment/configuration (no hard-coded deployment URL).
-- `packages/api-client/src/auth/access-token-store.ts` — in-memory-only access token storage.
-- Refresh interceptor must single-flight concurrent refresh requests, prevent refresh loops, clear in-memory access state on terminal failure, and propagate errors explicitly.
-
-Prefer OpenAPI-generated request/response types when compatible with the existing API codegen path; ensure Zod runtime schemas validate the same shapes. Do not return or store refresh tokens in frontend contracts.
-
-### Shared interface shape
-
-The frontend contract must expose an equivalent typed shape:
-
-```ts
-export interface LoginRequest {
-  identifier: string;
-  password: string;
-}
-
-export interface AuthenticatedUser {
-  id: string;
-  employeeCode: string;
-  fullNameAr: string;
-  fullNameEn: string | null;
-  roleCodes: string[];
-  permissions: string[];
-  repType: string | null;
-  defaultWarehouseId: number | null;
-  assignedWarehouseIds: number[];
-}
-
-export interface AuthenticationResponse {
-  accessToken: string;
-  tokenType: "Bearer";
-  expiresIn: number;
-  user: AuthenticatedUser;
-}
-```
-
-Keep C# DTO JSON property names and TypeScript/Zod fields synchronized and verified against OpenAPI. Refresh and logout have no token-bearing request DTO fields.
-
-## 7. Web Login and Session UX
-
-### Files to create/modify
-
-- `apps/web-erp/src/app/login/page.tsx`
-- `apps/web-erp/src/app/login/loading.tsx` if required for a stable route transition
-- `apps/web-erp/src/features/auth/LoginForm.tsx`
-- `apps/web-erp/src/providers/AuthProvider.tsx`
-- `apps/web-erp/src/app/layout.tsx` and existing providers only as needed
-- `apps/web-erp/src/locales/ar.ts`
-- `apps/web-erp/src/locales/en.ts`
-- `apps/web-erp/src/app/globals.css` only if token-based styling requires an update
-- `apps/web-erp/.env.example` with a non-secret API base URL placeholder only if required by the client configuration
-- `packages/ui-kit/src/components/forms/TextField.tsx`
-- `packages/ui-kit/src/components/forms/PasswordField.tsx`
-- exports from `packages/ui-kit/src/index.ts`
-- corresponding Storybook CSF3 stories for each new public form component
-
-### Login design requirements
-
-- Follow the existing AlMomiaa shell tokens, typography, theme, and locale providers.
-- Default to `ar-SA` / RTL; support `en-US` / LTR, light and dark themes.
-- Display the supplied AlMomiaa identity and the exact Arabic brand name `المومياء`; do not modify/crop the logo asset.
-- Provide accessible identifier and password inputs, show/hide password control, submit button, pending state, field validation, and generic authentication failure message.
-- Login identifier label/help text must clearly support phone number or employee code.
-- Use semantic form controls, visible keyboard focus, associated labels, `aria-invalid`/error descriptions, and minimum 44px interactive targets.
-- Do not add a public registration link or forgot-password UI because those flows are out of scope.
-- On successful authentication, store the access token only in memory and enter the existing ERP shell. On initial app boot, attempt cookie-based refresh before showing protected shell content. On refresh failure, clear auth state and route to `/login`.
-- Logout invokes the API, clears in-memory access state, and returns to `/login`. Frontend route protection is UX only; every protected API request must be authorized by the backend.
-- Translate all UI labels and authentication errors. Do not display raw backend exception details.
-- No real user names or business records in sample UI; use the authenticated user DTO or neutral placeholders only.
-
-### Session handling rules
-
-- Never put access or refresh tokens in `localStorage`, `sessionStorage`, IndexedDB, URLs, analytics, console output, or error logs.
-- Use Axios `withCredentials` for refresh/logout so the browser sends the HttpOnly cookie; configure backend CORS accordingly.
-- Keep access JWT in memory only. Re-establish it after reload through refresh cookie.
-- A `401` may trigger at most one coordinated refresh/retry; logout or clear session on terminal failure.
-- Do not claim that a frontend route guard provides authorization.
-
-## 8. Documentation Changes
-
-Update the architecture documentation in the same change:
-
-- `docs/architecture/05-Database.md`: add the refresh-session table and indexes, preserving the existing canonical identity DDL.
-- `docs/architecture/06-API-Specification.md`: document exact login/refresh/logout request/response shapes, cookie attributes, status/error behavior, and OpenAPI contracts.
-- `docs/architecture/07-Security.md`: document password hashing, generic errors, rate limits, refresh rotation/replay revocation, cookie policy, access-token storage, and CORS requirements.
-
-Do not change unrelated domain schemas, endpoints, or architectural decisions.
-
-## 9. Acceptance Criteria (Definition of Done)
-
-- [ ] EF Core identity mappings and migration align with `[id].[Users]`, `[id].[Roles]`, `[id].[RolePermissions]`, `[id].[UserRoles]`, and `[id].[UserWarehouses]` in `05-Database.md`.
-- [ ] Refresh-session persistence stores only token hashes, supports atomic rotation and replay detection, is concurrency-safe, and has the documented maximum lifetime.
-- [ ] `POST /api/v1/auth/login`, `/refresh`, and `/logout` match the documented contracts, OpenAPI output, cookie semantics, and public authorization metadata.
-- [ ] JWT has the required 10-minute lifetime and identity/role/effective-permission/warehouse/security-stamp context; permissions returned to the frontend are based on assigned roles, not client input.
-- [ ] Canonical role and permission seed data is idempotent and creates no default production user or password.
-- [ ] Redis security-stamp validation and invalidation are implemented; no default signing key, production credential, or wildcard credentialed CORS is committed.
-- [ ] Wrong password, unknown user, and inactive user do not reveal account existence; login throttling/lockout is covered by tests.
-- [ ] Backend unit/integration tests cover valid and invalid login, phone and employee-code lookup, inactive accounts, token claims, cookie flags, refresh rotation, replay, expiry, logout revocation, and security-stamp invalidation.
-- [ ] OpenAPI, C# DTOs, TypeScript interfaces, and Zod schemas agree; refresh credentials never appear in JSON.
-- [ ] Web login page is usable in Arabic RTL and English LTR, light/dark, keyboard-only, and narrow/mobile viewport; validation, pending, and generic error states are translated and accessible.
-- [ ] Access tokens exist only in memory in the frontend; refresh is cookie-based and refresh interceptor is single-flight with no retry loop.
-- [ ] Existing ERP shell is unavailable to unauthenticated users through UX session bootstrap, while backend remains the actual authorization boundary.
-- [ ] `@almomiaa/ui` form controls have individual files and corresponding RTL/LTR Storybook stories; no app-local duplicate visual controls or hardcoded app colors are introduced.
-- [ ] Backend build/tests, API-client typecheck/lint/tests, web-erp typecheck/lint/build, relevant Storybook build, and `@QA & Security Auditor` all pass.
-- [ ] `05-Database.md`, `06-API-Specification.md`, and `07-Security.md` are updated only for the authentication behavior implemented.
-- [ ] No public registration, password reset/MFA, user administration UI, or unrelated ERP workflow is added.
-- [ ] After QA returns `PASS`, archive as `docs/agent-ops/prompt-history/0003-user-authentication-and-login.md`, update `docs/agent-ops/PROJECT_LOG.md`, and mark this prompt completed. Do not archive before validation.
+### `apps/backend-api/src/AlMomiaa.Domain/` (Pure C# 13, zero external NuGet/framework references)
+
+Create bounded-context folders with clean domain entities matching `docs/architecture/05-Database.md`:
+
+- `Catalog/` — `Category.cs`, `Brand.cs`, `MasterProduct.cs`, `ProductUnit.cs`, `PriceList.cs`, `PriceListItem.cs`, `SupplierProduct.cs`
+- `Customers/` — `CustomerGrade.cs`, `Customer.cs`, `CanonicalCustomerGrades.cs`
+- `Inventory/` — `Warehouse.cs`, `WarehouseStock.cs`, `StockMovement.cs`, `StockTransfer.cs`, `StockTransferItem.cs`
+- `Procurement/` — `Supplier.cs`, `PurchaseOrder.cs`, `PurchaseOrderItem.cs`, `Container.cs`, `GoodsReceipt.cs`, `GoodsReceiptItem.cs`
+- `Sales/` — `SalesOrder.cs`, `SalesOrderItem.cs`, `ZatcaDeviceSequence.cs`, `Invoice.cs`, `SalesReturn.cs`, `SalesReturnItem.cs`, `DeliveryDispatch.cs`, `DeliveryDispatchItem.cs`
+- `Finance/` — `FiscalPeriod.cs`, `FinancialAccount.cs`, `Collection.cs`, `CollectionAllocation.cs`, `JournalEntry.cs`, `JournalLine.cs`, `DailyFinancialSnapshot.cs`
+- `System/` — `AuditLog.cs`, `OutboxMessage.cs`, `GpsRouteHistory.cs`
+
+### `apps/backend-api/src/AlMomiaa.Infrastructure/`
+
+- `Persistence/AlMomiaaDbContext.cs` — add typed `DbSet<T>` properties for all 38 new entities while preserving existing `[id]` `DbSet<T>` properties and SQLite `RowVersion` test compatibility.
+- `Persistence/AlMomiaaDbContextFactory.cs` — keep reading `ALMOMIAA_DESIGNTIME_SQLSERVER` from environment with safe local default fallback (no credentials committed).
+- `Persistence/Configurations/Catalog/CatalogConfigurations.cs`
+- `Persistence/Configurations/Customers/CustomerConfigurations.cs`
+- `Persistence/Configurations/Inventory/InventoryConfigurations.cs`
+- `Persistence/Configurations/Procurement/ProcurementConfigurations.cs`
+- `Persistence/Configurations/Sales/SalesConfigurations.cs`
+- `Persistence/Configurations/Finance/FinanceConfigurations.cs`
+- `Persistence/Configurations/System/SystemConfigurations.cs`
+- `Persistence/Configurations/Identity/IdentityConfigurations.cs` — add only the deferred foreign key `FK_UserWarehouses_Warehouse` linking `[id].[UserWarehouses](WarehouseId)` → `[inv].[Warehouses](Id)` (preserving all existing `[id]` mappings intact).
+- `Persistence/Migrations/<Timestamp>_AddFullErpSchema.cs` (+ `.Designer.cs` and updated `AlMomiaaDbContextModelSnapshot.cs`) generated via `dotnet ef migrations add AddFullErpSchema`.
+
+### `apps/backend-api/tests/`
+
+- Add schema/model alignment tests (in `AlMomiaa.AuthenticationTests` or a narrowly scoped test class in `AlMomiaa.ArchitectureTests`) verifying:
+  - All 8 schemas and 44 entity table mappings exist in `AlMomiaaDbContext.Model`
+  - Every mutable aggregate has a `RowVersion` concurrency token
+  - Every persisted computed column, check constraint, filtered unique index, and partition-ready composite PK is configured
+  - `CustomerGrades` canonical reference seed (A/B/C/D) is deterministic and zero users are seeded
+  - All existing `AlMomiaa.ArchitectureTests` (Domain zero dependencies) and `AlMomiaa.AuthenticationTests` (10/10 auth E2E tests) continue to pass!
+
+---
+
+## 4. Database Schema & EF Core 9 Mapping Requirements (`docs/architecture/05-Database.md`)
+
+All 8 schemas and 44 tables must match `05-Database.md` exactly:
+
+| Schema | Tables | Count | Notes |
+| :--- | :--- | :---: | :--- |
+| `[id]` | `Users`, `Roles`, `RolePermissions`, `UserRoles`, `UserWarehouses`, `RefreshTokenSessions` | 6 | Already created in Migration 1; Migration 2 adds `FK_UserWarehouses_Warehouse` → `[inv].[Warehouses](Id)` |
+| `[cat]` | `Categories`, `Brands`, `MasterProducts`, `ProductUnits`, `PriceLists`, `PriceListItems`, `SupplierProducts` | 7 | `IX_MasterProducts_Category` with `INCLUDE`; `UQ_PriceList_Unit_MinQty`; `UQ_Supplier_MasterProduct`; `FK_SupplierProducts_Supplier` → `[proc].[Suppliers](Id)` |
+| `[cust]` | `CustomerGrades`, `Customers` | 2 | Seed `CustomerGrades` (`A=60d`, `B=45d`, `C=30d`, `D=0d/AllowCredit=0`); `IX_Customers_AssignedRep` with `INCLUDE` |
+| `[inv]` | `Warehouses`, `WarehouseStocks`, `StockMovements`, `StockTransfers`, `StockTransferItems` | 5 | `WarehouseStocks.AvailableQty` persisted computed column + `CK_WarehouseStocks_NonNegative` + `UQ_Warehouse_Product`; `StockMovements` clustered PK `(CreatedAtUtc, Id)` |
+| `[proc]` | `Suppliers`, `PurchaseOrders`, `PurchaseOrderItems`, `Containers`, `GoodsReceipts`, `GoodsReceiptItems` | 6 | `PurchaseOrderItems.LineTotalSAR` and `Containers.TotalLandedCostSAR` persisted computed columns |
+| `[sales]` | `SalesOrders`, `SalesOrderItems`, `ZatcaDeviceSequences`, `Invoices`, `SalesReturns`, `SalesReturnItems`, `DeliveryDispatches`, `DeliveryDispatchItems` | 8 | `Invoices.RemainingBalance` persisted computed column; `UQ_Zatca_Device_Icv`; `IX_SalesOrders_Status_Created (Status, CreatedAtUtc DESC)`; `IX_Invoices_Customer_Status`; `UQ_Dispatch_Invoice` |
+| `[fin]` | `FiscalPeriods`, `FinancialAccounts`, `Collections`, `CollectionAllocations`, `JournalEntries`, `JournalLines`, `DailyFinancialSnapshots` | 7 | `CK_FiscalPeriods_Month`; `UQ_FiscalPeriod_YearMonth`; filtered unique indexes `UX_FinancialAccounts_OwnerRep` and `UX_Collections_ProofHash`; `JournalLines` clustered PK `(CreatedAtUtc, Id)` + `CK_JournalLines_NonNegative` |
+| `[sys]` | `AuditLogs`, `OutboxMessages`, `GpsRouteHistory` | 3 | `AuditLogs` clustered PK `(TimestampUtc, Id)`; `GpsRouteHistory` clustered PK `(RecordedAtUtc, Id)`; filtered index `IX_Outbox_Unprocessed` (`WHERE ProcessedAtUtc IS NULL`) |
+| **Total** | **8 Schemas** | **44** | **100% aligned with `05-Database.md`** |
+
+### Strict SQL Server & EF Core 9 Rules
+
+1. **Multiple Cascade Paths Prevention:** Use `DeleteBehavior.Restrict` (or `DeleteBehavior.NoAction`) on all cross-entity foreign keys so SQL Server never raises Error 1785 (`may cause cycles or multiple cascade paths`). Use `DeleteBehavior.Cascade` ONLY for owned line-item compositions (`StockTransferItems`, `PurchaseOrderItems`, `GoodsReceiptItems`, `SalesOrderItems`, `SalesReturnItems`, `DeliveryDispatchItems`).
+2. **Exact Numeric Precision:**
+   - Money / balances / prices / VAT: `decimal(18,2)`
+   - Unit costs / WAC / conversion factors: `decimal(18,4)`
+   - Stock / order quantities: `decimal(18,3)`
+   - VAT rate: `decimal(5,2)`
+   - Latitude / Longitude: `decimal(9,6)`; GPS accuracy: `decimal(6,2)`
+3. **UUIDv7 Keys:** Configure `.ValueGeneratedNever()` on all `UNIQUEIDENTIFIER` primary keys (IDs generated via `Guid.CreateVersion7()` in Domain).
+4. **Optimistic Concurrency (`ROWVERSION`):** Configure `.IsRowVersion()` on `MasterProducts`, `Customers`, `WarehouseStocks`, `StockTransfers`, `Suppliers`, `PurchaseOrders`, `Containers`, `SalesOrders`, `Invoices`, `DeliveryDispatches`, `FinancialAccounts`, `Collections`, and `RefreshTokenSessions`. Update `AlMomiaaDbContext` SQLite test guard so all `RowVersion` properties remain compatible with existing SQLite integration tests.
+5. **Append-Only Partition-Ready PKs:** Configure composite primary keys `(CreatedAtUtc, Id)` / `(TimestampUtc, Id)` / `(RecordedAtUtc, Id)` with `Id` as `BIGINT IDENTITY(1,1)` (`ValueGeneratedOnAdd`) and `.IsClustered()` on `inv.StockMovements`, `fin.JournalLines`, `sys.AuditLogs`, and `sys.GpsRouteHistory`.
+6. **Deterministic `HasData` Seeding:** Use a fixed static UTC timestamp (`new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)`) for `CustomerGrades` seed rows so EF Core detects zero pending model changes (`dotnet ef migrations has-pending-model-changes` passes cleanly).
+7. **Live SQL Server Provisioning:**
+   - Provision database **`AlMomiaa`** on local default SQL Server (`Server=localhost;Database=AlMomiaa;Trusted_Connection=True;TrustServerCertificate=True;`) via `dotnet ef database update` using the `ALMOMIAA_DESIGNTIME_SQLSERVER` environment variable.
+   - Verify via SQL query (`sqlcmd` or `Microsoft.Data.SqlClient` / PowerShell) against `AlMomiaa` that:
+     - Database `AlMomiaa` exists
+     - All 8 schemas and all 44 tables exist
+     - `__EFMigrationsHistory` contains both `20261123063607_InitialIdentityAndRefreshSessions` and `<Timestamp>_AddFullErpSchema`
+     - `[id].[Roles]` has 7 rows, `[cust].[CustomerGrades]` has 4 rows, and `[id].[Users]` has 0 rows
+     - Both deferred FKs (`FK_UserWarehouses_Warehouse`, `FK_SupplierProducts_Supplier`) exist.
+
+---
+
+## 5. Security & Domain Rules
+
+- **Zero Secrets in Source Control:** Do NOT commit passwords, SQL credentials, or hardcoded environment connection strings into `appsettings.json`, migrations, or source files. `appsettings.json` keeps `"ConnectionStrings": { "SqlServer": "" }`.
+- **No Seeded Users or Passwords:** Seed only canonical reference tables (`[id].[Roles]`, `[id].[RolePermissions]`, `[cust].[CustomerGrades]`). Never seed an admin user or default password in migrations or startup code.
+- **Clean Architecture Purity:** `AlMomiaa.Domain` must keep zero references to EF Core, ASP.NET Core, MediatR, or FluentValidation.
+- **No Unrelated Scope:** Do not modify `apps/web-erp`, `apps/design-system-studio`, `packages/ui-kit`, `packages/api-client`, or add new Web API endpoints.
+
+---
+
+## 6. Design System Components Mapping
+
+Not applicable — backend database schema and SQL Server provisioning only.
+
+---
+
+## 7. Acceptance Criteria (Definition of Done)
+
+- [ ] All 38 remaining canonical entities are implemented cleanly under `AlMomiaa.Domain` with zero external framework/NuGet dependencies.
+- [ ] All 8 schemas (`id`, `cat`, `cust`, `inv`, `proc`, `sales`, `fin`, `sys`) and all 44 tables are mapped in `AlMomiaaDbContext` matching `docs/architecture/05-Database.md` (columns, lengths, `DECIMAL` precisions, persisted computed columns, check constraints, filtered unique indexes, covering indexes, `ROWVERSION` tokens, and partition-ready clustered PKs).
+- [ ] Deferred foreign keys `FK_UserWarehouses_Warehouse` and `FK_SupplierProducts_Supplier` are created cleanly with no SQL Server multiple-cascade-path errors.
+- [ ] Additive EF Core 9 migration `AddFullErpSchema` is generated cleanly without modifying `20261123063607_InitialIdentityAndRefreshSessions`, and `dotnet ef migrations has-pending-model-changes` reports zero drift.
+- [ ] Canonical reference data (`7` roles, `31` canonical permission claim types mapped across roles, `4` customer grades A/B/C/D) is seeded idempotently with **0 seeded users or passwords**.
+- [ ] Database `AlMomiaa` and all 44 tables are created and verified on the local Microsoft SQL Server default instance (`localhost`, Windows Integrated Auth) via `dotnet ef database update`.
+- [ ] `dotnet build AlMomiaa.Erp.sln` passes with 0 warnings and 0 errors, and all backend tests (Domain dependency tests, authentication E2E tests, and new schema/model verification tests) pass.
+- [ ] No secrets, hardcoded connection strings, frontend changes, or unrelated API endpoints were introduced.
+- [ ] `@QA & Security Auditor` returns `PASS`, after which `@Orchestrator` archives this prompt as `docs/agent-ops/prompt-history/0004-provision-sqlserver-almomiaa-database.md`, updates `docs/agent-ops/PROJECT_LOG.md`, and marks `CURRENT_PROMPT.md` completed.
