@@ -1,241 +1,172 @@
-# PROMPT-0009: Change Password & Logout, Strict Single-Warehouse `WH_KEEPER`, Role-Gated 10s Live Google Maps GPS Tracker, Remove API JSON Inspector from Web ERP, and Persistent Notifications with Alert Popups & Mark-All-Read
+# PROMPT-0010: Multi-Warehouse Product Stock Allocation, Detailed Per-Unit Pricing & Packaging UX, Multi-Warehouse Availability Breakdown, and Sales Rep-to-Customer Linking
 
-- **Status:** `COMPLETED (Archived as 0009-change-password-whkeeper-gps-notifications-cleanup.md)`
-- **Prompt ID:** `PROMPT-0009`
-- **Scope:** `apps/backend-api` (Auth change-password, `WH_KEEPER` 1-warehouse enforcement, `GET /api/v1/gps/live` & history role-gated to `SUPER_ADMIN`/`EXEC_MGR`/`SALES_MGR`, `[ops].[Notifications]` entity + SQL Server migration + `NotificationsController` + SignalR push), `packages/ui-kit` (`NotificationItem` reusable component), `apps/design-system-studio` (`NotificationItem.stories.tsx`), `packages/api-client` (change-password, notifications, live GPS, new SignalR notification events), `apps/web-erp` (remove API JSON Inspector, add Change Password & Logout, add Notifications Bell/Tab + Live Alert Popups + Mark All Read + Mute toggle, enforce single-warehouse `WH_KEEPER` UI, add 10s Hybrid Google Maps `/gps` screen), `apps/rep-pwa` (add Change Password & Logout, add Notifications Bell/Drawer + Live Alert Popups + Mark All Read + Mute toggle), `docs/architecture/{05-Database,06-API-Specification,07-Security}.md`
-- **Reference baseline:** Architecture v3.2 (`00-ADR-Architecture-Decisions.md`..`08-Development-Roadmap.md`); `PROMPT-0001`..`PROMPT-0008` completed (live `.NET 9` API + SignalR `/hubs/operations` on `:5000`, live SQL Server `AlMomiaa` with 3 migrations, 22/22 backend tests passing, 26 `@almomiaa/ui` components + 26 Storybook 8 stories, `@almomiaa/api-client` with 7/7 tests, `apps/web-erp` on `:3000`, `apps/rep-pwa` on `:5173`)
+- **Status:** `COMPLETED — ARCHIVED (docs/agent-ops/prompt-history/0010-product-multi-warehouse-pricing-and-rep-customer-linking.md)`
+- **Prompt ID:** `PROMPT-0010`
+- **Scope:** `apps/backend-api` (Catalog multi-warehouse opening stock & per-warehouse availability breakdown, Customer rep-assignment & sales-rep lookup endpoints + tests; zero SQL migration needed), `packages/api-client` (typed multi-warehouse product creation, availability breakdown, and rep-customer assignment APIs), `apps/web-erp` (`/catalog` enhanced product creation & availability breakdown + `/customers` rep dropdown & bulk rep-customer linking), `docs/architecture/06-API-Specification.md`
+- **Reference baseline:** Architecture v3.2 (`00-ADR`..`08-Development-Roadmap`); `PROMPT-0001`..`PROMPT-0009` completed (live `.NET 9` API + SignalR `/hubs/operations` on `:5000`, 45-table SQL Server `AlMomiaa`, 26/26 backend tests passing, 27 `@almomiaa/ui` components + 27 Storybook 8 stories, `@almomiaa/api-client` with 8/8 tests, `apps/web-erp` 11 routes on `:3000`, `apps/rep-pwa` on `:5173`)
 - **Confirmed User Decisions:**
-  1. **Hybrid Google Maps (`/gps`, every 10s):** Interactive Google Maps JavaScript API multi-marker map when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is configured, with seamless zero-key Google Maps embed (`https://maps.google.com/maps?q=LAT,LNG&z=15&output=embed`) + "Open in Google Maps" link fallback so it works locally immediately. Strictly restricted to `SUPER_ADMIN`, `EXEC_MGR`, and `SALES_MGR`.
-  2. **Change Password Security Behavior:** Verify current password, update hash, rotate `SecurityStamp` (invalidating all active JWTs immediately), revoke all active refresh-token sessions, clear refresh cookie, and immediately log the user out on frontend/PWA so they sign back in with the new password.
-  3. **Persistent Notifications + Alert Popups + Mark All Read + Mute Toggle:** Persist notifications in `[ops].[Notifications]` (applied via EF Core migration to local SQL Server `AlMomiaa`), deliver live SignalR alert popups + unread badge + Notifications Bell/Drawer/Tab (`Unread` / `All`), expose `POST /api/v1/notifications/mark-all-read` (marks all read in DB so the user is never re-notified for read items), AND include a **"Mute Live Alert Popups"** preference toggle in the Notifications panel.
-  4. **GPS Scope:** Backend live GPS read endpoints + `apps/web-erp` 10-second Google Maps tracking page ONLY (do **NOT** add automatic browser geolocation streaming in `apps/rep-pwa`).
-  5. **Remove API JSON Inspector from `apps/web-erp`:** Completely remove the developer API JSON inspector button/drawer (`فاحص استجابات نقاط النهاية الحية`) and `ApiActivityProvider` from `apps/web-erp` (keep `JsonResponseViewer` inside `packages/ui-kit` & Storybook).
-  6. **`WH_KEEPER` Single Warehouse Rule:** Enforce strictly across Backend API (`POST /users`, `PUT /users/{id}/warehouses`, `PUT /users/{id}/roles`) and `apps/web-erp` (`/users` & `/inventory`) that every `WH_KEEPER` must have **exactly 1 warehouse** assigned (`AssignedWarehouseIds.Count == 1` and `DefaultWarehouseId == AssignedWarehouseIds[0]`).
+  1. **Order of Execution:** Deliver Product Multi-Warehouse Stock, Detailed Unit Pricing, Availability Breakdown & Rep-Customer Linking FIRST (`PROMPT-0010`), followed by Free HTTPS Cloud Demo Deployment (`PROMPT-0011`: Vercel `web-erp`/`rep-pwa` + Render/Koyeb free `.NET 9` Docker backend + demo DB).
+  2. **Detailed Per-Unit Pricing & Multi-Unit Packaging:** Dynamic Base Unit selector (`Piece / حبة`, `Box / علبة`, `Carton / كرتون`, `Pallet / طبلية`) that clearly binds and explains `WAC`, `Min Allowed Floor`, `Wholesale Price`, and `Retail Price` per selected base unit (with 15% VAT preview & Arabic/English guidance) PLUS an optional **Additional Packaging Units** builder (e.g., `Carton = 24 Pieces`, `Pallet = 40 Cartons`) with auto-suggested and editable unit prices.
+  3. **Multi-Warehouse Product Allocation & Breakdown:** When creating a product, support selecting all warehouses (or any subset) and setting distinct opening stock quantities per warehouse (e.g., `100` in Warehouse 1, `40` in Warehouse 2). In **Price & Availability Lookup (`استعلام السعر والتوفر`)**, display **Total Available Qty across ALL warehouses** PLUS a full **per-warehouse stock breakdown** (`Physical`, `Reserved`, `Incoming`, `Available` for every warehouse).
+  4. **Rep-to-Customer Linking (`ربط مندوب بعميل أو أكثر`):** 1-to-Many model (`Customer.AssignedRepId` — zero DB migration needed): replace raw Rep GUID inputs with a live Sales Rep dropdown on Create Customer, add a per-customer "Change Rep" action, and add a bulk **"Assign Rep to 1 or More Customers"** drawer & atomic API endpoint.
 
 ---
 
 ## 1. Purpose of Prompt
 
-Harden production usability, governance, and real-time operational awareness across AlMomiaa ERP (`apps/backend-api`, `apps/web-erp`, `apps/rep-pwa`, `@almomiaa/api-client`, `@almomiaa/ui`):
-1. Give every authenticated employee self-service **Change Password** (with full session revocation & forced re-login) and polished **Logout** across Backend, Web ERP, and Rep PWA.
-2. Enforce the strict business invariant that a **Warehouse Keeper (`WH_KEEPER`)** owns and operates **only one warehouse** — both server-side and in the UI.
-3. Provide **Live Field Rep GPS Tracking on Google Maps (10-second refresh)** strictly restricted to **`SUPER_ADMIN`, `EXEC_MGR`, and `SALES_MGR`**.
-4. Clean up `apps/web-erp` into pure production UX by removing the developer **API JSON Inspector** (`فاحص استجابات نقاط النهاية الحية`).
-5. Upgrade operational alerts into a durable **Notification Center + Live Alert Popups** backed by `[ops].[Notifications]` in SQL Server, with a **Notifications Tab/Drawer**, per-item read, **"Mark All Read"** endpoint (persisted so already-read alerts never notify the user again), and a **"Mute Live Alert Popups"** toggle.
+Eliminate pricing ambiguity, enable realistic multi-warehouse product distribution from day one, provide complete cross-warehouse stock visibility, and make linking field sales representatives (`SALES_REP`) to one or more customers fast and error-free:
+1. **Unambiguous Product Pricing & Multi-Unit Packaging (`/catalog`):** Users immediately see whether each price (`WAC`, `Min Allowed`, `Wholesale`, `Retail`) is for a **Piece (`حبة`)**, **Box (`علبة`)**, **Carton (`كرتون`)**, or **Pallet (`طبلية`)**, with clear Arabic/English explanations, VAT-inclusive previews, and optional multi-unit conversion packaging lines.
+2. **Multi-Warehouse Opening Stock Allocation (`POST /api/v1/catalog/products` + `/catalog`):** Users can check **"Select All Warehouses"** or pick specific warehouses and set exact initial stock quantities per warehouse (e.g. 50 in WH-01, 20 in WH-02), persisted atomically into `[inv].[WarehouseStocks]` and immutable `[inv].[StockMovements]` (`MovementType = "OpeningBalance"`).
+3. **Cross-Warehouse Availability Breakdown (`GET /api/v1/catalog/categories/{categoryId}/products` & `GET /api/v1/catalog/products/{id}/availability` + `/catalog`):** Show both the **grand total available across all warehouses** and the **exact stock inside each warehouse**.
+4. **Rep-to-Customer Linking (`GET /api/v1/customers/sales-reps`, `PUT /api/v1/customers/{id}/assign-rep`, `POST /api/v1/customers/assign-rep/bulk` + `/customers`):** Enable `SUPER_ADMIN` and `SALES_MGR` to assign a `SALES_REP` to one or multiple customers using human-readable rep names/codes (no raw GUIDs).
 
 ---
 
 ## 2. Target Execution Agents and Order
 
 1. **`@Backend .NET`** —
-   - **A. Change Password (`POST /api/v1/auth/change-password`) & Logout Hardening:**
-     - Add `ChangePasswordRequest(CurrentPassword, NewPassword, ConfirmNewPassword)`, `ChangePasswordCommand`, FluentValidator (current required, new password min 8 chars + complexity/trimmed check, `NewPassword != CurrentPassword`, `ConfirmNewPassword == NewPassword`), and `ChangePasswordCommandHandler` in `AlMomiaa.Application/Authentication/Commands/ChangePassword/`.
-     - Implement `ChangePasswordAsync` in `AuthenticationService.cs`: verify current password via `IPasswordHasher`, set new hash, call `user.RotateSecurityStamp()` & update `ISecurityStampStore` immediately (invalidating every active access JWT across all devices), revoke ALL non-revoked `[id].[RefreshTokenSessions]` for the user, write `[ops].[AuditLogs]` (`ChangePassword`, NEVER logging any password value!), and save in one transaction.
-     - Expose `[Authorize] [HttpPost("change-password")]` in `AuthController.cs`: validates trusted origin, runs `ChangePasswordCommand`, clears `almomiaa_refresh` cookie (`Max-Age=0`), and returns `204 No Content` (returns `400` on validation errors / wrong current password via RFC 7807 ProblemDetails).
-   - **B. `WH_KEEPER` Strictly Single Warehouse Invariant:**
-     - Add a shared validation guard in `IamModuleService.cs` (`EnsureWarehouseKeeperSingleWarehouseRule`): whenever the resulting role set of a user includes `WH_KEEPER` (and NOT `SUPER_ADMIN`? Enforce strictly for any `WH_KEEPER` role assignment!), the user MUST have **exactly 1** assigned warehouse (`warehouseIds.Count == 1`) AND `DefaultWarehouseId == warehouseIds[0]`.
-     - Enforce this rule in:
-       1. `CreateUserAsync` (`POST /api/v1/users`) — rejects `WH_KEEPER` with 0 or >1 warehouses (`BusinessRuleException` -> `422 Unprocessable Entity`), and automatically aligns `DefaultWarehouseId = warehouseIds[0]`.
-       2. `UpdateUserWarehousesAsync` (`PUT /api/v1/users/{id}/warehouses`) — rejects updating a `WH_KEEPER` to 0 or >1 warehouses (`422`), and aligns `DefaultWarehouseId = warehouseIds[0]`.
-       3. `UpdateUserRolesAsync` (`PUT /api/v1/users/{id}/roles`) — rejects assigning `WH_KEEPER` to a user whose currently assigned warehouse count is != 1 (`422`, with clear message instructing to assign exactly 1 warehouse first).
-   - **C. Role-Restricted Live GPS Endpoints (`SUPER_ADMIN`, `EXEC_MGR`, `SALES_MGR` ONLY):**
-     - Register strict authorization policy `"GpsTrackRoles"` in `Program.cs` requiring `ctx.User.IsInRole("SUPER_ADMIN") || ctx.User.IsInRole("EXEC_MGR") || ctx.User.IsInRole("SALES_MGR")` (matching both `ClaimTypes.Role` and `RoleCodes`).
-     - Add `GetLiveRepLocationsQuery` (`GET /api/v1/gps/live`) and `GetRepGpsHistoryQuery` (`GET /api/v1/gps/reps/{repId:guid}/history?hours=24&limit=100`) in `AlMomiaa.Application/Operations/` and `OperationsModuleService.cs`, querying `[ops].[GpsRouteHistory]` joined with `[id].[Users]` (returning `RepId`, `EmployeeCode`, `FullNameAr`, `FullNameEn`, `Phone`, `Latitude`, `Longitude`, `AccuracyMeters`, `NearCustomerId`, `RecordedAtUtc`, `IsOnlineRecent` where ping age <= 2 minutes).
-     - Add `[Authorize(Policy = "GpsTrackRoles")]` endpoints on `GpsController.cs` (`GET /api/v1/gps/live`, `GET /api/v1/gps/reps/{repId:guid}/history`).
-   - **D. Persistent `[ops].[Notifications]` Table, Migration, Endpoints & SignalR Push:**
-     - Add `UserNotification` domain entity in `AlMomiaa.Domain/SystemOps/UserNotification.cs` (`Id`, `RecipientUserId`, `EventType`, `Severity`, `TitleAr`, `TitleEn`, `MessageAr`, `MessageEn`, `EntityName`, `EntityId`, `IsRead`, `ReadAtUtc`, `CreatedAtUtc`) with `Create(...)` and `MarkAsRead(utcNow)` methods (zero external dependencies).
-     - Add `UserNotificationConfiguration` in `AlMomiaa.Infrastructure/Persistence/Configurations/System/SystemConfigurations.cs` mapping to `[ops].[Notifications]` with FK to `[id].[Users]` (`DeleteBehavior.Cascade`) and filtered covering index `IX_Notifications_Recipient_Unread` on `(RecipientUserId, CreatedAtUtc)` `WHERE [IsRead] = 0`.
-     - Add `DbSet<UserNotification> Notifications` to `AlMomiaaDbContext`, generate additive EF Core migration `AddOpsNotificationsTable`, and apply it to local SQL Server `AlMomiaa` (`dotnet ef database update`).
-     - Add `INotificationsModuleService` & CQRS queries/commands (`GetMyNotificationsQuery`, `MarkNotificationReadCommand`, `MarkAllNotificationsReadCommand`) and `NotificationsController` (`/api/v1/notifications`, `[Authorize]`):
-       - `GET /api/v1/notifications?unreadOnly=&page=1&pageSize=30` -> `{ items, totalCount, unreadCount, nextCursor }` (strictly filtered to `RecipientUserId == currentUser.UserId`).
-       - `PATCH /api/v1/notifications/{id:guid}/read` -> marks single notification owned by current user read (`200 OK`, returns updated `NotificationDto` + `unreadCount`).
-       - `POST /api/v1/notifications/mark-all-read` -> bulk updates all unread notifications of current user (`IsRead = true`, `ReadAtUtc = utcNow`), broadcasts `NotificationsMarkedAllRead` to `user:{userId}` via SignalR, and returns `{ markedCount, unreadCount: 0 }`.
-     - Persist bilingual `UserNotification` rows automatically inside `SalesModuleService` (`CreateSalesOrderAsync` -> notify active `SALES_MGR` & `SUPER_ADMIN` users + `ACCOUNTANT`/`EXEC_MGR` if credit hold; `ApproveSalesOrderAsync` -> notify submitting `RepId` + assigned warehouse keepers; `RejectSalesOrderAsync` -> notify submitting `RepId`; `EditSubmittedOrderByManagerAsync` / `OverrideOrderPriceAsync` / `CoApproveOrderCreditAsync` -> notify submitting `RepId`) AND push `NotificationReceived` via `IOperationsRealtimeNotifier` -> `SignalROperationsRealtimeNotifier` to each recipient's `user:{recipientId}` group!
-   - **E. Backend Tests:**
-     - Add comprehensive integration tests (`AccountSecurityGpsWarehouseAndNotificationsTests.cs`) covering:
-       1. `POST /api/v1/auth/change-password`: rejects wrong current password (`400`), rejects weak/mismatched password (`400`), succeeds (`204`), immediately rejects old JWT (`401` via rotated `SecurityStamp`), rejects old refresh cookie (`401`), and accepts login with the new password (`200`).
-       2. `WH_KEEPER` single-warehouse invariant: rejects 0 or 2 warehouses on `POST /users` (`422`), rejects 0 or 2 warehouses on `PUT /users/{id}/warehouses` (`422`), rejects assigning `WH_KEEPER` role to a multi-warehouse user (`422`), accepts exactly 1 warehouse (`201`/`200`).
-       3. `GET /api/v1/gps/live`: allows `SUPER_ADMIN`, `EXEC_MGR`, `SALES_MGR` (`200` with latest rep coordinates), strictly forbids `SALES_REP`, `WH_KEEPER`, `ACCOUNTANT`, `PURCH_MGR` (`403`).
-       4. Persistent Notifications + Mark All Read: creating & approving an order persists unread `UserNotification` rows for `SALES_MGR` and `SALES_REP`, `GET /api/v1/notifications` returns `unreadCount > 0`, `POST /api/v1/notifications/mark-all-read` marks all read (`unreadCount == 0`), and subsequent `GET /api/v1/notifications?unreadOnly=true` returns 0 unread items.
-     - Sync `docs/architecture/{05-Database,06-API-Specification,07-Security}.md`.
-2. **`@Design System UI`** —
-   - Add reusable pure component `NotificationItem` (`packages/ui-kit/src/components/feedback/NotificationItem.tsx`) supporting severity tone (`info | success | warning | danger`), unread gold indicator dot, title, message, timestamp, and optional click/`onMarkRead` action — strict semantic tokens & logical RTL/LTR CSS, exported from `packages/ui-kit/src/index.ts` (27 total components).
-   - Add CSF3 Storybook 8 story `apps/design-system-studio/src/stories/NotificationItem.stories.tsx` and update `Introduction.mdx` (27 components).
-3. **`@Frontend Engineer`** —
-   - **A. `@almomiaa/api-client` Expansion:**
-     - Add `changePassword(request: { currentPassword, newPassword, confirmNewPassword })` to `AuthService` (`POST /auth/change-password`, clears in-memory access token on success).
-     - Add `notifications` service (`src/modules/notifications.service.ts`: `getNotifications`, `markRead`, `markAllRead`) and live GPS methods on `operations` service (`getLiveGps`, `getRepGpsHistory`).
-     - Extend `src/realtime/operations-hub.ts` with `NotificationReceived` (`UserNotificationDto`) and `NotificationsMarkedAllRead` events, export all new types from `src/index.ts`, and add unit tests in `tests/erp-client.test.mjs`.
-   - **B. `apps/web-erp` Updates:**
-     - **Remove API JSON Inspector (`فاحص استجابات نقاط النهاية الحية`):** Delete `src/providers/ApiActivityProvider.tsx`, remove `ApiActivityProvider` from `src/app/layout.tsx`, remove `subscribeApiActivity` / `onApiCall` activity tracking from `src/lib/api-client.ts`, remove the `API Inspector` button and `DrawerModal` + `JsonResponseViewer` from `src/components/ErpAppLayout.tsx`, and remove unused inspector strings from `src/locales/ar.ts` & `src/locales/en.ts`.
-     - **Notifications Center + Alert Popups + Mark All Read + Mute Toggle:**
-       - Upgrade `RealtimeProvider.tsx` to load persistent notifications via `GET /api/v1/notifications`, listen to `NotificationReceived` & `NotificationsMarkedAllRead` over SignalR, display unread incoming alerts as dismissible alert popups (respecting the user's **"Mute Live Alert Popups"** toggle!), expose `markRead(id)`, `markAllRead()` (`POST /api/v1/notifications/mark-all-read` — immediately resets unread count to `0`, clears all active alert popups, and stops notifying for read alerts), and `mutedPopups` / `setMutedPopups`.
-       - Add a **Notifications Bell** button (with unread badge count) in `ErpAppLayout.tsx` opening a **Notifications Drawer** with `Unread` / `All` tabs, **"Mark All Read"** (`تحديد الكل كمقروء`) button, **"Mute Live Alert Popups"** (`كتم التنبيهات المنبثقة`) toggle, and clickable `NotificationItem` list.
-     - **Change Password & Logout:**
-       - Add a **"Change Password"** (`تغيير كلمة المرور`) button in `ErpAppLayout.tsx` sidebar footer alongside **Logout**, opening a validated `DrawerModal` (`currentPassword`, `newPassword`, `confirmNewPassword`) that calls `authService.changePassword(...)`, closes SignalR, clears auth state, and redirects to `/login?passwordChanged=1` (showing a clean success `AlertBanner` on `/login`).
-     - **`WH_KEEPER` Single Warehouse UI Enforcement:**
-       - In `src/features/users/UsersWorkspace.tsx`: when creating a user with `WH_KEEPER` or editing warehouses of a `WH_KEEPER`, render a single-select warehouse dropdown (auto-setting `defaultWarehouseId = warehouseId` and `assignedWarehouseIds = [warehouseId]`) with a clear localized rule banner.
-       - In `src/features/inventory/InventoryWorkspace.tsx`: when the logged-in user is a scoped `WH_KEEPER`, lock the warehouse view strictly to their 1 assigned warehouse (hide multi-warehouse switcher).
-     - **Live 10-Second Google Maps GPS Tracking Screen (`/gps`):**
-       - Add `/gps` route (`src/app/gps/page.tsx` + `src/features/gps/GpsTrackingWorkspace.tsx`) and sidebar nav item visible **ONLY** when `user.roleCodes` intersects `["SUPER_ADMIN", "EXEC_MGR", "SALES_MGR"]`!
-       - Auto-polls `GET /api/v1/gps/live` every **10 seconds** (with pause/resume + manual refresh + 10s countdown badge).
-       - Implements **Hybrid Google Maps**: loads Google Maps JS API with live markers & info windows when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is present, and seamlessly renders a live interactive Google Maps embed (`https://maps.google.com/maps?q=LAT,LNG&z=15&output=embed`) + "Open in Google Maps" button for the selected rep when no API key is configured, alongside the live rep list table (name, code, coordinates, accuracy, online status, last ping timestamp, recent route history).
-       - Update `apps/web-erp/.env.local.example` documenting optional `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`.
-   - **C. `apps/rep-pwa` Updates:**
-     - **Change Password & Logout:** Add a **Change Password** modal/drawer accessible from `RepMobileShell` header menu + polished Logout (disconnects SignalR, clears in-memory JWT, calls `/auth/logout`, redirects to `/login`; after Change Password redirects to `/login?passwordChanged=1` with a localized success banner).
-     - **Persistent Notifications + Alert Popups + Notifications Drawer + Mark All Read + Mute Toggle:**
-       - Upgrade `AppProviders.tsx` to hydrate `GET /api/v1/notifications`, react to `NotificationReceived` & `NotificationsMarkedAllRead` over SignalR, show unread live alert banners (respecting the **"Mute Live Alert Popups"** toggle), and add a **Notifications Bell** button (with unread badge) in `RepMobileShell.tsx` opening the Notifications Drawer (`Unread` / `All` tabs, **"Mark All Read"**, **"Mute Live Alert Popups"** toggle, and `NotificationItem` list).
-     - Do **NOT** add auto-GPS streaming to `apps/rep-pwa` (per confirmed decision A4).
-4. **`@QA & Security Auditor`** —
-   - Verify `.NET 9` build (0 warnings, 0 errors), SQL Server migration applied cleanly to local `AlMomiaa` DB (`dotnet ef migrations has-pending-model-changes` = zero drift), and all `dotnet test` tests passing.
-   - Verify `pnpm -r typecheck`, `pnpm -r lint`, `@almomiaa/ui` build, `@almomiaa/api-client` build & tests, `apps/design-system-studio` `build-storybook` (27 stories), `apps/rep-pwa` production PWA build, and `apps/web-erp` Next.js 15 production build.
-   - Verify static security & hygiene gates:
-     - Zero references to `ApiActivityProvider` / `JsonResponseViewer` / `فاحص استجابات` in `apps/web-erp/src`.
-     - Zero forbidden imports in `packages/ui-kit`, zero hardcoded hex colors in TSX/TS, zero directional Tailwind classes, zero `any`/`@ts-ignore`, zero JWT/refresh-token browser storage, zero committed secrets (including zero hardcoded Google Maps API keys!).
-     - Confirm `GET /api/v1/gps/live` returns `403` for non-privileged roles and `200` for `SUPER_ADMIN`, `EXEC_MGR`, `SALES_MGR`.
-5. **`@Orchestrator`** — Archive as `docs/agent-ops/prompt-history/0009-change-password-whkeeper-gps-notifications-cleanup.md`, update `docs/agent-ops/PROJECT_LOG.md`, and mark `CURRENT_PROMPT.md` completed only after QA returns `PASS`.
+   - **A. Domain (`AlMomiaa.Domain`):**
+     - Add `AssignRepresentative(Guid repId)` to `Customer.cs` (validates `repId != Guid.Empty`).
+   - **B. Catalog Multi-Warehouse Opening Stock & Availability Breakdown (`AlMomiaa.Application/Catalog/` & `CatalogAndInventoryServices.cs` & `CatalogController.cs`):**
+     - Add `InitialWarehouseStockRequest(int WarehouseId, decimal InitialQty, decimal MinReorderQty = 0m)` and optional `InitialWarehouseStockRequest[]? InitialWarehouseStocks = null` on `CreateMasterProductRequest`.
+     - Extend `CreateMasterProductCommandValidator` to validate `InitialWarehouseStocks`: each `WarehouseId > 0`, `InitialQty >= 0`, `MinReorderQty >= 0`, and no duplicate `WarehouseId` values.
+     - In `CatalogModuleService.CreateMasterProductAsync`: when `InitialWarehouseStocks` is provided, verify all referenced warehouses exist (`NotFoundException` otherwise), create `WarehouseStock` rows (`WarehouseStock.Create(whId, product.Id, entry.MinReorderQty)`), call `stock.ReceiveGoods(entry.InitialQty, 0m)` when `entry.InitialQty > 0`, and append immutable `StockMovement.Append(whId, product.Id, "OpeningBalance", entry.InitialQty, stock.PhysicalQty, product.WeightedAvgCost, "MasterProduct", product.Id, currentUser.UserId, utcNow)` inside the same transaction!
+     - Add `ProductWarehouseStockBreakdownDto(int WarehouseId, string WarehouseCode, string WarehouseNameAr, string? WarehouseNameEn, string WarehouseType, decimal PhysicalQty, decimal ReservedQty, decimal IncomingQty, decimal AvailableQty, decimal MinReorderQty)`.
+     - Enrich `CategoryProductPriceDto` with:
+       - `BaseUnit` (`string`)
+       - `DefaultUnitNameAr` (`string`), `DefaultUnitNameEn` (`string`)
+       - `TotalPhysicalQty` (`decimal`), `TotalAvailableQty` (`decimal`)
+       - `WarehouseStocks` (`IReadOnlyList<ProductWarehouseStockBreakdownDto>`)
+       - Keep `AvailableQty` backward-compatible: equals the filtered `warehouseId`'s `AvailableQty` when `warehouseId` is specified, or `TotalAvailableQty` when `warehouseId` is `null` (All Warehouses)!
+     - Add `ProductAvailabilityDto(Guid MasterProductId, string SKU, string NameAr, string? NameEn, string BaseUnit, decimal WholesaleSellingPrice, decimal RetailSellingPrice, decimal MinAllowedSellingPrice, decimal VatRate, decimal TotalPhysicalQty, decimal TotalReservedQty, decimal TotalIncomingQty, decimal TotalAvailableQty, IReadOnlyList<ProductUnitDto> Units, IReadOnlyList<ProductWarehouseStockBreakdownDto> WarehouseStocks)` and `GetProductAvailabilityQuery(Guid MasterProductId)` exposed at `[Authorize(Policy = "catalog:view")] GET /api/v1/catalog/products/{id:guid}/availability`.
+   - **C. Sales Rep-to-Customer Assignment (`AlMomiaa.Application/Customers/` & `IamAndCustomersServices.cs` & `CustomersController.cs`):**
+     - Enrich `CustomerDto` with `string? AssignedRepCode = null`, `string? AssignedRepNameAr = null`, `string? AssignedRepNameEn = null` (populated via `AssignedRep` navigation in `GetCustomersAsync` and `CreateCustomerAsync`).
+     - Add `SalesRepOptionDto(Guid Id, string EmployeeCode, string FullNameAr, string? FullNameEn, string Phone, string? RepType, int AssignedCustomersCount)` and `GetSalesRepsQuery` exposed at `[Authorize(Policy = "customers:view")] GET /api/v1/customers/sales-reps` (returns active users holding `SALES_REP` role or `orders:create`, ordered by `FullNameAr`).
+     - Add `AssignCustomerRepRequest(Guid AssignedRepId)` + `AssignCustomerRepCommand(Guid CustomerId, Guid AssignedRepId)` exposed at `[Authorize(Policy = "customers:manage")] PUT /api/v1/customers/{id:guid}/assign-rep` (verifies target rep exists and is active, updates `Customer.AssignedRepId`, appends `[ops].[AuditLogs]` with old/new rep IDs, returns updated `CustomerDto`).
+     - Add `BulkAssignCustomersRepRequest(Guid AssignedRepId, Guid[] CustomerIds)` + `BulkAssignCustomersRepCommand` + `BulkAssignCustomersRepResponse(Guid AssignedRepId, string AssignedRepCode, string AssignedRepNameAr, int UpdatedCount, IReadOnlyList<Guid> CustomerIds)` exposed at `[Authorize(Policy = "customers:manage")] POST /api/v1/customers/assign-rep/bulk` (validates `CustomerIds` non-empty & max 200, verifies rep exists and is active, verifies all requested customers exist, updates all in one ACID transaction, appends `[ops].[AuditLogs]`).
+   - **D. Backend Tests (`CatalogWarehouseAndRepCustomerTests.cs`):**
+     - Creating a product with `InitialWarehouseStocks` across 2 warehouses creates `WarehouseStock` rows + `"OpeningBalance"` `StockMovements`, and `GET /catalog/products/{id}/availability` & `GET /catalog/categories/{catId}/products` return accurate `TotalAvailableQty` (`qty1 + qty2`) AND exact per-warehouse breakdown!
+     - `GET /customers/sales-reps` lists active `SALES_REP` accounts with assigned customer counts.
+     - `PUT /customers/{id}/assign-rep` and `POST /customers/assign-rep/bulk` reassign 1 or multiple customers to a `SALES_REP`, and the assigned `SALES_REP` immediately sees ONLY those assigned customers on `GET /api/v1/customers` (ABAC verified!).
+   - Sync `docs/architecture/06-API-Specification.md`.
+2. **`@Frontend Engineer`** —
+   - **A. `@almomiaa/api-client` Updates:**
+     - Extend `CreateMasterProductRequest` (`initialWarehouseStocks`), `CategoryProductPriceDto` (`baseUnit`, `defaultUnitNameAr`, `defaultUnitNameEn`, `totalPhysicalQty`, `totalAvailableQty`, `warehouseStocks`), and add `ProductWarehouseStockBreakdownDto`, `ProductAvailabilityDto`, and `getProductAvailability(productId)` in `src/modules/catalog.service.ts`.
+     - Extend `CustomerDto` (`assignedRepCode`, `assignedRepNameAr`, `assignedRepNameEn`), add `SalesRepOptionDto`, `BulkAssignCustomersRepResponse`, `getSalesReps()`, `assignCustomerRep(customerId, assignedRepId)`, and `bulkAssignCustomersRep(assignedRepId, customerIds)` in `src/modules/customers.service.ts`.
+     - Export all new types from `src/index.ts` and add unit tests in `tests/erp-client.test.mjs`.
+   - **B. `apps/web-erp` `/catalog` (`CatalogWorkspace.tsx`) Overhaul:**
+     - **Create Product Drawer:**
+       - Add explicit **Base Unit selector** (`حبة / Piece`, `علبة / Box`, `كرتون / Carton`, `طبلية / Pallet`) and dynamically label every price input with the chosen base unit + rich Arabic/English helper text + live 15% VAT-inclusive preview:
+         - `تكلفة الشراء المتوسطة (WAC) لكل {unit}` — average purchase cost per 1 base unit (excl. VAT)
+         - `الحد الأدنى المسموح للبيع لكل {unit} (MR-02)` — minimum floor price per 1 base unit before manager override is required
+         - `سعر الجملة لكل {unit}` — default wholesale price per 1 base unit (excl. VAT)
+         - `سعر التجزئة لكل {unit}` — default retail price per 1 base unit (excl. VAT)
+       - Add **Additional Packaging Units (`وحدات التعبئة الإضافية`)** section: e.g. `+ إضافة وحدة (كرتون / طبلية / علبة)` with Unit Name (AR/EN), Conversion Factor (`كم {baseUnit} داخل الوحدة؟`), Barcode, and auto-computed editable Wholesale / Retail / Min Floor prices!
+       - Add **Warehouse Stock Allocation (`توزيع المخزون على المستودعات`)** section:
+         - Load all active warehouses via `erpApi.inventory.getWarehouses()`.
+         - Include **"Select All Warehouses (`تحديد الكل`)"** and **"Clear (`إلغاء التحديد`)"** buttons.
+         - For every warehouse, render a checkbox + warehouse name/code + **Initial Quantity (`الكمية الابتدائية بالوحدة الأساسية`)** + **Min Reorder (`حد إعادة الطلب`)** inputs — allowing different quantities per warehouse (e.g., 100 in WH-01, 40 in WH-02, 0 in WH-03)!
+     - **Master Products Table:**
+       - Clearly display the product's **Base Unit** badge (`حبة` / `كرتون` / `طبلية`), all packaging units count, and a **"Stock Breakdown (`توزيع المستودعات`)"** button opening the multi-warehouse availability drawer (`GET /catalog/products/{id}/availability`).
+     - **Price & Availability Lookup Tab (`استعلام السعر والتوفر`):**
+       - Replace the raw numeric Warehouse ID input with a real **Warehouse Dropdown** including **"All Warehouses (`جميع المستودعات`)"** as default!
+       - Display columns: `SKU`, `Product & Base Unit`, `Resolved Price (SAR)`, `Min Floor (MR-02)`, **`Total Available (All Warehouses)`** (`الكمية الكلية المتاحة`), **`Per-Warehouse Breakdown`** (compact badges showing exact available quantity in each warehouse, e.g., `WH-01: 100`, `WH-02: 40`), and a **"Full Breakdown"** drawer button showing `Physical`, `Reserved`, `Incoming`, `Available`, `Min Reorder` per warehouse + all packaging unit prices!
+   - **C. `apps/web-erp` `/customers` (`CustomersWorkspace.tsx`) Overhaul:**
+     - Load active sales reps via `erpApi.customers.getSalesReps()`.
+     - Replace raw `Assigned Rep GUID` input in **Create Customer Drawer** with a clear **Sales Rep Select Dropdown** (`EmployeeCode — Name (current customers count)`).
+     - Show the assigned **Sales Rep Name & Code** in the Customers Table (no raw GUID!) plus a **"Change Rep (`تغيير المندوب`)"** button per row.
+     - Add a header button **"Assign Rep to Customers (`ربط مندوب بعملاء`)"** opening a dedicated bulk linking drawer:
+       - Select **1 Sales Rep** from dropdown.
+       - Search & check **1 or more customers** (with "Select All Shown" / "Clear Selection" toggles and live selected count badge).
+       - Submit `POST /api/v1/customers/assign-rep/bulk` and refresh both the Customers table and Sales Rep customer counts!
+3. **`@QA & Security Auditor`** —
+   - Verify `dotnet build` (0 warnings, 0 errors), `dotnet test` (all 26 existing + new `CatalogWarehouseAndRepCustomerTests` passing), `pnpm -r typecheck`, `pnpm -r lint`, `@almomiaa/api-client` tests, `apps/rep-pwa` build (ensuring enriched `CategoryProductPriceDto` remains 100% backward compatible in `rep-pwa`!), and `apps/web-erp` Next.js 15 production build.
+   - Verify static rules: zero hardcoded hex colors, zero directional Tailwind classes (`ml-`/`mr-`/`pl-`/`pr-`/`left-`/`right-`/`text-left`/`text-right`), zero `any`/`@ts-ignore`, cost masking (`WeightedAvgCost == null` for `SALES_REP`) still intact, and ABAC row scoping (`SALES_REP` sees only newly assigned customers) verified!
+4. **`@Orchestrator`** — Archive as `docs/agent-ops/prompt-history/0010-product-multi-warehouse-pricing-and-rep-customer-linking.md`, update `docs/agent-ops/PROJECT_LOG.md`, and mark `CURRENT_PROMPT.md` completed only after QA returns `PASS`.
 
 ---
 
 ## 3. Target Files to Create / Modify
 
 ### `apps/backend-api/`
-- `src/AlMomiaa.Domain/SystemOps/UserNotification.cs` (new)
-- `src/AlMomiaa.Application/Authentication/Commands/ChangePassword/ChangePasswordCommand.cs` (new)
-- `src/AlMomiaa.Application/Authentication/Abstractions/IAuthenticationService.cs` (modify — add `ChangePasswordAsync`)
-- `src/AlMomiaa.Application/Common/Abstractions/IOperationsRealtimeNotifier.cs` (modify — add `NotifyUserNotificationAsync` & `NotifyAllNotificationsReadAsync`)
-- `src/AlMomiaa.Application/Operations/OperationsModule.cs` (modify — add `LiveRepGpsDto`, `RepGpsHistoryPointDto`, `GetLiveRepLocationsQuery`, `GetRepGpsHistoryQuery`)
-- `src/AlMomiaa.Application/Notifications/NotificationsModule.cs` (new — `UserNotificationDto`, `NotificationsPageDto`, `MarkAllNotificationsReadResponse`, `GetMyNotificationsQuery`, `MarkNotificationReadCommand`, `MarkAllNotificationsReadCommand`, `INotificationsModuleService`)
-- `src/AlMomiaa.Infrastructure/Persistence/AlMomiaaDbContext.cs` (modify — add `DbSet<UserNotification> Notifications`)
-- `src/AlMomiaa.Infrastructure/Persistence/Configurations/System/SystemConfigurations.cs` (modify — add `UserNotificationConfiguration` -> `[ops].[Notifications]`)
-- `src/AlMomiaa.Infrastructure/Persistence/Migrations/*_AddOpsNotificationsTable.cs` (new — additive migration applied to SQL Server `AlMomiaa`)
-- `src/AlMomiaa.Infrastructure/Authentication/AuthenticationService.cs` (modify — implement `ChangePasswordAsync` with stamp rotation & full session revocation)
-- `src/AlMomiaa.Infrastructure/Persistence/Services/IamAndCustomersServices.cs` (modify — enforce `WH_KEEPER` strictly 1 warehouse in `CreateUserAsync`, `UpdateUserWarehousesAsync`, `UpdateUserRolesAsync`)
-- `src/AlMomiaa.Infrastructure/Persistence/Services/FinanceAndOperationsServices.cs` (modify — implement `GetLiveRepLocationsAsync`, `GetRepGpsHistoryAsync`)
-- `src/AlMomiaa.Infrastructure/Persistence/Services/NotificationsModuleService.cs` (new — persistent notifications CRUD + bulk mark-all-read)
-- `src/AlMomiaa.Infrastructure/Persistence/Services/ProcurementAndSalesServices.cs` (modify — persist `UserNotification` rows & push `NotificationReceived` on order workflow events)
-- `src/AlMomiaa.Infrastructure/Realtime/NoOpOperationsRealtimeNotifier.cs` & `DependencyInjection.cs` (modify)
-- `src/AlMomiaa.WebApi/Hubs/SignalROperationsRealtimeNotifier.cs` (modify — dispatch `NotificationReceived` & `NotificationsMarkedAllRead` to `user:{userId}`)
-- `src/AlMomiaa.WebApi/Controllers/AuthController.cs` (modify — add `[Authorize] POST /api/v1/auth/change-password`)
-- `src/AlMomiaa.WebApi/Controllers/GpsController.cs` (modify — add `[Authorize(Policy = "GpsTrackRoles")] GET /api/v1/gps/live` & `GET /api/v1/gps/reps/{repId:guid}/history`)
-- `src/AlMomiaa.WebApi/Controllers/NotificationsController.cs` (new — `GET /api/v1/notifications`, `PATCH /api/v1/notifications/{id:guid}/read`, `POST /api/v1/notifications/mark-all-read`)
-- `src/AlMomiaa.WebApi/Program.cs` (modify — add `"GpsTrackRoles"` policy)
-- `tests/AlMomiaa.AuthenticationTests/AccountSecurityGpsWarehouseAndNotificationsTests.cs` (new)
-
-### `packages/ui-kit/` & `apps/design-system-studio/`
-- `packages/ui-kit/src/components/feedback/NotificationItem.tsx` (new)
-- `packages/ui-kit/src/index.ts` (modify — export `NotificationItem` & `NotificationItemProps`)
-- `apps/design-system-studio/src/stories/NotificationItem.stories.tsx` (new)
-- `apps/design-system-studio/src/stories/Introduction.mdx` (modify — 27 components)
+- `src/AlMomiaa.Domain/Customers/Customer.cs` (modify — add `AssignRepresentative(Guid repId)`)
+- `src/AlMomiaa.Application/Catalog/CatalogModule.cs` (modify — add `InitialWarehouseStockRequest`, `ProductWarehouseStockBreakdownDto`, `ProductAvailabilityDto`, `GetProductAvailabilityQuery`, extend `CreateMasterProductRequest` & `CategoryProductPriceDto`, validators & handlers)
+- `src/AlMomiaa.Application/Customers/CustomersModule.cs` (modify — add `SalesRepOptionDto`, `GetSalesRepsQuery`, `AssignCustomerRepRequest`/`Command`, `BulkAssignCustomersRepRequest`/`Command`/`Response`, enrich `CustomerDto`, validators & handlers)
+- `src/AlMomiaa.Application/Common/Abstractions/ModuleServices.cs` (modify — add new methods on `ICatalogModuleService` & `ICustomersModuleService`)
+- `src/AlMomiaa.Infrastructure/Persistence/Services/CatalogAndInventoryServices.cs` (modify — allocate initial stocks + `"OpeningBalance"` `StockMovements` on `CreateMasterProductAsync`, return multi-warehouse breakdown in `GetCategoryProductsAsync` & `GetProductAvailabilityAsync`)
+- `src/AlMomiaa.Infrastructure/Persistence/Services/IamAndCustomersServices.cs` (modify — include rep names on `CustomerDto`, implement `GetSalesRepsAsync`, `AssignCustomerRepAsync`, `BulkAssignCustomersRepAsync`)
+- `src/AlMomiaa.WebApi/Controllers/CatalogController.cs` (modify — add `GET /api/v1/catalog/products/{id:guid}/availability`)
+- `src/AlMomiaa.WebApi/Controllers/CustomersController.cs` (modify — add `GET /api/v1/customers/sales-reps`, `PUT /api/v1/customers/{id:guid}/assign-rep`, `POST /api/v1/customers/assign-rep/bulk`)
+- `tests/AlMomiaa.AuthenticationTests/CatalogWarehouseAndRepCustomerTests.cs` (new)
 
 ### `packages/api-client/`
-- `src/auth/auth.types.ts`, `src/auth/auth.schemas.ts`, `src/auth/auth.service.ts` (modify — add `ChangePasswordRequest` & `changePassword`)
-- `src/modules/notifications.service.ts` (new)
-- `src/modules/operations.service.ts` (modify — add `getLiveGps` & `getRepGpsHistory`)
-- `src/realtime/operations-hub.ts` (modify — add `NotificationReceived` & `NotificationsMarkedAllRead` events)
+- `src/modules/catalog.service.ts` (modify — multi-warehouse stock requests/breakdowns + `getProductAvailability`)
+- `src/modules/customers.service.ts` (modify — rep metadata + `getSalesReps`, `assignCustomerRep`, `bulkAssignCustomersRep`)
 - `src/index.ts` & `tests/erp-client.test.mjs` (modify)
 
 ### `apps/web-erp/`
-- `src/providers/ApiActivityProvider.tsx` (DELETE — remove API JSON Inspector)
-- `src/lib/api-client.ts` (modify — remove `subscribeApiActivity` / `onApiCall` inspector hooks)
-- `src/app/layout.tsx` (modify — remove `ApiActivityProvider`)
-- `src/providers/RealtimeProvider.tsx` (modify — integrate persistent notifications, `markRead`, `markAllRead`, `mutedPopups` toggle, SignalR `NotificationReceived` / `NotificationsMarkedAllRead`)
-- `src/components/ErpAppLayout.tsx` (modify — remove API Inspector button/drawer, add Notifications Bell & Drawer with Unread/All tabs + Mark All Read + Mute toggle, add Change Password drawer & sidebar button, add role-restricted `/gps` nav item for `SUPER_ADMIN`/`EXEC_MGR`/`SALES_MGR`)
-- `src/app/login/page.tsx` & `src/features/auth/LoginForm.tsx` (modify — show localized success banner when `?passwordChanged=1`)
-- `src/features/users/UsersWorkspace.tsx` (modify — enforce single-warehouse select for `WH_KEEPER`)
-- `src/features/inventory/InventoryWorkspace.tsx` (modify — lock `WH_KEEPER` to their 1 assigned warehouse)
-- `src/app/gps/page.tsx` & `src/features/gps/GpsTrackingWorkspace.tsx` (new — 10-second Hybrid Google Maps live GPS tracker strictly for `SUPER_ADMIN`, `EXEC_MGR`, `SALES_MGR`)
-- `src/locales/ar.ts`, `src/locales/en.ts`, `.env.local.example` (modify)
-
-### `apps/rep-pwa/`
-- `src/providers/AppProviders.tsx` (modify — add persistent notifications, `markRead`, `markAllRead`, `mutedPopups`, `changePassword`)
-- `src/components/RepMobileShell.tsx` (modify — add Notifications Bell & Drawer with Unread/All tabs + Mark All Read + Mute toggle, plus Change Password modal/drawer and Logout)
-- `src/pages/LoginPage.tsx` (modify — show localized success banner when `?passwordChanged=1`)
-- `src/locales/ar.ts`, `src/locales/en.ts` (modify)
+- `src/features/catalog/CatalogWorkspace.tsx` (modify — dynamic Base Unit + detailed Arabic/English per-unit price labels & hints + VAT preview + Additional Packaging Units builder + multi-warehouse Select All / per-warehouse opening stock inputs + cross-warehouse Total & Per-Warehouse Availability Lookup + Breakdown Drawer)
+- `src/features/customers/CustomersWorkspace.tsx` (modify — live Sales Rep dropdown on Create Customer, assigned rep name display, single "Change Rep" drawer, and bulk "Assign Rep to 1+ Customers" drawer)
 
 ### `docs/architecture/`
-- `05-Database.md`, `06-API-Specification.md`, `07-Security.md` (sync `[ops].[Notifications]`, `POST /auth/change-password`, `GET /gps/live`, `GET/PATCH/POST /notifications`, and `WH_KEEPER` single-warehouse invariant)
+- `06-API-Specification.md` (sync new Catalog availability & Customer rep-assignment endpoints)
 
 ---
 
 ## 4. Frontend & Backend Data Schema
 
-### Change Password (`POST /api/v1/auth/change-password`)
+### Product Creation with Multi-Warehouse Initial Stock (`POST /api/v1/catalog/products`)
 ```ts
-interface ChangePasswordRequest {
-  currentPassword: string;     // min 1
-  newPassword: string;         // min 8, max 128, != currentPassword
-  confirmNewPassword: string;  // must === newPassword
+interface InitialWarehouseStockRequest {
+  warehouseId: number;     // > 0, unique in array
+  initialQty: number;      // >= 0 (in BaseUnit)
+  minReorderQty?: number;  // >= 0 (default 0)
 }
+// Added as optional field `initialWarehouseStocks?: InitialWarehouseStockRequest[]`
+// on CreateMasterProductRequest alongside `baseUnit`, `weightedAvgCost`, `minAllowedSellingPrice`,
+// `wholesaleSellingPrice`, `retailSellingPrice`, and `units[]`.
 ```
-- Response: `204 No Content` + `Set-Cookie: almomiaa_refresh=; Max-Age=0; ...`
 
-### Persistent Notification (`[ops].[Notifications]`)
+### Multi-Warehouse Stock Breakdown (`GET /api/v1/catalog/products/{id}/availability` & `CategoryProductPriceDto`)
 ```ts
-interface UserNotificationDto {
-  id: string;
-  eventType: string; // OrderSubmitted | OrderApproved | OrderRejected | OrderUpdated | CreditCoApprovalRequired
-  severity: "info" | "success" | "warning" | "danger";
-  titleAr: string;
-  titleEn: string;
-  messageAr: string;
-  messageEn: string;
-  entityName: string | null;
-  entityId: string | null;
-  isRead: boolean;
-  readAtUtc: string | null;
-  createdAtUtc: string;
-}
-
-interface NotificationsPageDto {
-  items: UserNotificationDto[];
-  totalCount: number;
-  unreadCount: number;
-  nextCursor: string | null;
-}
-
-interface MarkAllNotificationsReadResponse {
-  markedCount: number;
-  unreadCount: number; // always 0
+interface ProductWarehouseStockBreakdownDto {
+  warehouseId: number;
+  warehouseCode: string;
+  warehouseNameAr: string;
+  warehouseNameEn: string | null;
+  warehouseType: string;
+  physicalQty: number;
+  reservedQty: number;
+  incomingQty: number;
+  availableQty: number;
+  minReorderQty: number;
 }
 ```
 
-### Live Rep GPS (`GET /api/v1/gps/live` — `SUPER_ADMIN`, `EXEC_MGR`, `SALES_MGR` ONLY)
+### Bulk Rep-to-Customers Linking (`POST /api/v1/customers/assign-rep/bulk`)
 ```ts
-interface LiveRepGpsDto {
-  repId: string;
-  employeeCode: string;
-  fullNameAr: string;
-  fullNameEn: string | null;
-  phone: string;
-  latitude: number;
-  longitude: number;
-  accuracyMeters: number | null;
-  nearCustomerId: string | null;
-  recordedAtUtc: string;
-  isOnlineRecent: boolean;
+interface BulkAssignCustomersRepRequest {
+  assignedRepId: string; // Active user UUID (SALES_REP)
+  customerIds: string[]; // 1..200 Customer UUIDs
 }
 ```
 
 ---
 
-## 5. Security, Design System & Operational Rules
+## 5. Security & Domain Rules
 
-1. **Zero Password Leakage:** Never log `currentPassword`, `newPassword`, or `confirmNewPassword` in structured logs, audit logs, telemetry, or error responses.
-2. **Immediate Session Invalidation on Password Change:** Rotate `SecurityStamp` in DB + `ISecurityStampStore` and revoke all `RefreshTokenSessions` inside the same transaction so stolen JWTs and refresh cookies fail immediately (`401`).
-3. **Strict Role Gate on GPS Tracking:** `GET /api/v1/gps/live` and `GET /api/v1/gps/reps/{repId}/history` enforce `"GpsTrackRoles"` (`SUPER_ADMIN`, `EXEC_MGR`, `SALES_MGR` ONLY); UI hides `/gps` nav link and shows `403 Access Restricted` for any other role.
-4. **Strict `WH_KEEPER` Single-Warehouse Invariant:** Enforced at API service layer (`CreateUser`, `UpdateUserWarehouses`, `UpdateUserRoles`) AND UI (`/users`, `/inventory`).
-5. **Notification Isolation:** Users can ONLY read or mark read notifications where `RecipientUserId == CurrentUser.UserId`; `POST /api/v1/notifications/mark-all-read` updates `IsRead = true` in SQL Server so read notifications never re-trigger unread badges or live alert popups.
-6. **Zero Hardcoded Secrets & Strict Design Tokens:** Never hardcode Google Maps API keys (use optional `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` env var); zero hardcoded hex colors in TSX/TS; zero directional Tailwind utilities (`ml-`/`mr-`/`pl-`/`pr-`/`left-`/`right-`/`text-left`/`text-right`); zero `any`/`@ts-ignore`; zero JWT storage in `localStorage`/`sessionStorage`/IndexedDB (note: the non-sensitive boolean UI preference `mutedPopups` may live in memory or non-auth UI preference, never tokens!).
+1. **Cost Privacy Preserved (`07-Security.md`):** `WeightedAvgCost` remains masked (`null`) for `SALES_REP`, `SALES_MGR`, and `WH_KEEPER` across catalog read endpoints; `ProductAvailabilityDto` does NOT expose `WeightedAvgCost`.
+2. **Inventory Auditability:** Every non-zero initial warehouse stock allocated during product creation appends an immutable `[inv].[StockMovements]` row (`MovementType = "OpeningBalance"`) and `[ops].[AuditLogs]` record inside the same ACID transaction.
+3. **Rep Assignment Authorization & ABAC:** Only `customers:manage` (`SUPER_ADMIN`, `SALES_MGR`, `ACCOUNTANT`) may assign/reassign reps (`PUT /customers/{id}/assign-rep`, `POST /customers/assign-rep/bulk`). Target `assignedRepId` must reference an existing, active employee. After assignment, `SALES_REP` ABAC scoping (`Customer.AssignedRepId == CurrentUser.Id`) automatically reflects the updated customer portfolio.
+4. **Strict Design System & RTL/LTR Hygiene:** Zero hardcoded hex colors in TSX/TS, zero directional Tailwind classes (`ml-`/`mr-`/`pl-`/`pr-`/`left-`/`right-`/`text-left`/`text-right`), `tabular-nums` on all prices & quantities, `font-mono dir="ltr"` on SKUs/codes, zero `any`/`@ts-ignore`.
 
 ---
 
 ## 6. Acceptance Criteria (Definition of Done)
 
-- [x] `POST /api/v1/auth/change-password` validates current/new password, rotates `SecurityStamp`, revokes all refresh sessions, clears refresh cookie, audits the action without secrets, and both `apps/web-erp` and `apps/rep-pwa` provide Change Password + Logout flows that disconnect SignalR and redirect to `/login`.
-- [x] `WH_KEEPER` is strictly enforced to have **exactly 1 warehouse** across Backend (`POST /users`, `PUT /users/{id}/warehouses`, `PUT /users/{id}/roles` reject 0 or >1 with `422`) and `apps/web-erp` (`/users` & `/inventory`).
-- [x] `GET /api/v1/gps/live` and `GET /api/v1/gps/reps/{repId}/history` are strictly restricted to `SUPER_ADMIN`, `EXEC_MGR`, and `SALES_MGR` (`403` for all other roles), and `apps/web-erp` `/gps` renders the 10-second auto-refreshing Hybrid Google Maps tracker exclusively for those 3 roles.
-- [x] The API JSON Inspector (`فاحص استجابات نقاط النهاية الحية` / `ApiActivityProvider` / `JsonResponseViewer` drawer) is completely removed from `apps/web-erp`.
-- [x] `[ops].[Notifications]` migration is generated and applied to local SQL Server `AlMomiaa`; alerts persist and stream live via SignalR; `GET /api/v1/notifications`, `PATCH /api/v1/notifications/{id}/read`, and `POST /api/v1/notifications/mark-all-read` work end-to-end; both `apps/web-erp` and `apps/rep-pwa` display live alert popups, a Notifications Bell/Drawer (`Unread`/`All` tabs), **"Mark All Read"** (clearing unread count and preventing re-notification), and a **"Mute Live Alert Popups"** toggle.
-- [x] `NotificationItem` is exported from `@almomiaa/ui` (27 total components) with a CSF3 Storybook 8 story (27 stories) and clean `build-storybook`.
-- [x] All backend builds (`0` warnings/errors), backend tests (`22+` including new `AccountSecurityGpsWarehouseAndNotificationsTests`), `@almomiaa/api-client` tests, `pnpm -r typecheck`, `pnpm -r lint`, `apps/rep-pwa` PWA build, `apps/web-erp` Next.js 15 build, and `@QA & Security Auditor` gate return **`PASS`**, after which `@Orchestrator` archives this prompt as `docs/agent-ops/prompt-history/0009-change-password-whkeeper-gps-notifications-cleanup.md`, updates `docs/agent-ops/PROJECT_LOG.md`, and marks `CURRENT_PROMPT.md` completed.
+- [ ] `POST /api/v1/catalog/products` supports optional `initialWarehouseStocks[]` (allocating different opening stock quantities across selected/all warehouses in `[inv].[WarehouseStocks]` and logging immutable `"OpeningBalance"` `[inv].[StockMovements]`).
+- [ ] `GET /api/v1/catalog/categories/{categoryId}/products` and `GET /api/v1/catalog/products/{id}/availability` return both **total available stock across all warehouses** AND an exact **per-warehouse breakdown** (`Physical`, `Reserved`, `Incoming`, `Available`).
+- [ ] `apps/web-erp` `/catalog` Create Product Drawer provides: dynamic Base Unit selector (`Piece`/`Box`/`Carton`/`Pallet`), crystal-clear Arabic/English per-unit labels + hints + 15% VAT previews for `WAC`, `Min Floor`, `Wholesale`, and `Retail`, optional **Additional Packaging Units** builder, and **Select All Warehouses / Per-Warehouse Initial Qty** allocation.
+- [ ] `apps/web-erp` `/catalog` **Price & Availability Lookup** displays **"All Warehouses"** option, total stock across all warehouses, inline per-warehouse stock badges, and a full **Warehouse Stock Breakdown Drawer**.
+- [ ] `GET /api/v1/customers/sales-reps`, `PUT /api/v1/customers/{id}/assign-rep`, and `POST /api/v1/customers/assign-rep/bulk` work end-to-end with audit logging, and `apps/web-erp` `/customers` uses a live Sales Rep dropdown on Create Customer, shows Rep names in the table, supports single "Change Rep", and supports bulk **"Assign Rep to 1 or More Customers"**.
+- [ ] All backend builds (`0` warnings/errors), backend tests (`26+` including new `CatalogWarehouseAndRepCustomerTests`), `@almomiaa/api-client` tests, `pnpm -r typecheck`, `pnpm -r lint`, `apps/rep-pwa` PWA build, `apps/web-erp` Next.js 15 build, and `@QA & Security Auditor` gate return **`PASS`**, after which `@Orchestrator` archives this prompt as `docs/agent-ops/prompt-history/0010-product-multi-warehouse-pricing-and-rep-customer-linking.md`, updates `docs/agent-ops/PROJECT_LOG.md`, and marks `CURRENT_PROMPT.md` completed.

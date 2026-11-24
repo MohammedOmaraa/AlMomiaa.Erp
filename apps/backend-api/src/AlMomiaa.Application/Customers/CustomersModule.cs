@@ -26,7 +26,33 @@ public sealed record CustomerDto(
     Guid AssignedRepId,
     decimal? Latitude,
     decimal? Longitude,
-    bool IsActive);
+    bool IsActive,
+    string? AssignedRepCode = null,
+    string? AssignedRepNameAr = null,
+    string? AssignedRepNameEn = null);
+
+public sealed record SalesRepOptionDto(
+    Guid Id,
+    string EmployeeCode,
+    string FullNameAr,
+    string? FullNameEn,
+    string Phone,
+    string? RepType,
+    int AssignedCustomersCount);
+
+public sealed record AssignCustomerRepRequest(Guid AssignedRepId);
+public sealed record AssignCustomerRepCommand(Guid CustomerId, Guid AssignedRepId) : IRequest<CustomerDto>;
+
+public sealed record BulkAssignCustomersRepRequest(Guid AssignedRepId, Guid[] CustomerIds);
+public sealed record BulkAssignCustomersRepCommand(BulkAssignCustomersRepRequest Request) : IRequest<BulkAssignCustomersRepResponse>;
+public sealed record BulkAssignCustomersRepResponse(
+    Guid AssignedRepId,
+    string AssignedRepCode,
+    string AssignedRepNameAr,
+    int UpdatedCount,
+    IReadOnlyList<Guid> CustomerIds);
+
+public sealed record GetSalesRepsQuery : IRequest<IReadOnlyList<SalesRepOptionDto>>;
 
 public sealed record RecentCustomerOrderDto(Guid Id, string OrderNumber, string Status, decimal TotalAmount, DateTime CreatedAtUtc);
 
@@ -137,6 +163,42 @@ public sealed class UpdateCustomerGradesCommandValidator : AbstractValidator<Upd
 public sealed class GetCustomersHandler(ICustomersModuleService service) : IRequestHandler<GetCustomersQuery, PagedResult<CustomerDto>>
 {
     public Task<PagedResult<CustomerDto>> Handle(GetCustomersQuery request, CancellationToken ct) => service.GetCustomersAsync(request, ct);
+}
+
+public sealed class AssignCustomerRepCommandValidator : AbstractValidator<AssignCustomerRepCommand>
+{
+    public AssignCustomerRepCommandValidator()
+    {
+        RuleFor(x => x.CustomerId).NotEmpty();
+        RuleFor(x => x.AssignedRepId).NotEmpty();
+    }
+}
+
+public sealed class BulkAssignCustomersRepCommandValidator : AbstractValidator<BulkAssignCustomersRepCommand>
+{
+    public BulkAssignCustomersRepCommandValidator()
+    {
+        RuleFor(x => x.Request).NotNull();
+        RuleFor(x => x.Request.AssignedRepId).NotEmpty();
+        RuleFor(x => x.Request.CustomerIds)
+            .NotEmpty().WithMessage("At least one customer must be selected.")
+            .Must(ids => ids.Length <= 200).WithMessage("Maximum 200 customers can be assigned per request.");
+    }
+}
+
+public sealed class GetSalesRepsHandler(ICustomersModuleService service) : IRequestHandler<GetSalesRepsQuery, IReadOnlyList<SalesRepOptionDto>>
+{
+    public Task<IReadOnlyList<SalesRepOptionDto>> Handle(GetSalesRepsQuery request, CancellationToken ct) => service.GetSalesRepsAsync(ct);
+}
+
+public sealed class AssignCustomerRepHandler(ICustomersModuleService service) : IRequestHandler<AssignCustomerRepCommand, CustomerDto>
+{
+    public Task<CustomerDto> Handle(AssignCustomerRepCommand request, CancellationToken ct) => service.AssignCustomerRepAsync(request, ct);
+}
+
+public sealed class BulkAssignCustomersRepHandler(ICustomersModuleService service) : IRequestHandler<BulkAssignCustomersRepCommand, BulkAssignCustomersRepResponse>
+{
+    public Task<BulkAssignCustomersRepResponse> Handle(BulkAssignCustomersRepCommand request, CancellationToken ct) => service.BulkAssignCustomersRepAsync(request, ct);
 }
 
 public sealed class GetCustomerCreditStatusHandler(ICustomersModuleService service) : IRequestHandler<GetCustomerCreditStatusQuery, CustomerCreditStatusDto>

@@ -31,6 +31,9 @@ public interface ICustomersModuleService
     Task<CustomerDto> CreateCustomerAsync(CreateCustomerCommand command, CancellationToken ct);
     Task<IReadOnlyList<CustomerGradeDto>> GetGradesAsync(CancellationToken ct);
     Task<IReadOnlyList<CustomerGradeDto>> UpdateGradesAsync(UpdateCustomerGradesCommand command, CancellationToken ct);
+    Task<IReadOnlyList<SalesRepOptionDto>> GetSalesRepsAsync(CancellationToken ct);
+    Task<CustomerDto> AssignCustomerRepAsync(AssignCustomerRepCommand command, CancellationToken ct);
+    Task<BulkAssignCustomersRepResponse> BulkAssignCustomersRepAsync(BulkAssignCustomersRepCommand command, CancellationToken ct);
 }
 
 public interface ICatalogModuleService
@@ -41,6 +44,7 @@ public interface ICatalogModuleService
     Task<BrandDto> CreateBrandAsync(CreateBrandCommand command, CancellationToken ct);
     Task<PagedResult<MasterProductDto>> GetProductsAsync(GetProductsQuery query, CancellationToken ct);
     Task<PagedResult<CategoryProductPriceDto>> GetCategoryProductsAsync(GetCategoryProductsQuery query, CancellationToken ct);
+    Task<ProductAvailabilityDto> GetProductAvailabilityAsync(Guid masterProductId, CancellationToken ct);
     Task<MasterProductDto> CreateMasterProductAsync(CreateMasterProductCommand command, CancellationToken ct);
     Task<SupplierProductDto> LinkSupplierProductAsync(LinkSupplierProductCommand command, CancellationToken ct);
     Task<IReadOnlyList<PriceListDto>> GetPriceListsAsync(CancellationToken ct);

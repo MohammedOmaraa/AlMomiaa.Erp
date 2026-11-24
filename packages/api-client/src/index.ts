@@ -39,11 +39,13 @@ export type {
 
 export { createCustomersService } from "./modules/customers.service.js";
 export type {
+  BulkAssignCustomersRepResponse,
   CreateCustomerRequest,
   CustomerCreditStatusDto,
   CustomerDto,
   CustomerGradeDto,
   RecentCustomerOrderDto,
+  SalesRepOptionDto,
   UpdateCustomerGradeItem,
 } from "./modules/customers.service.js";
 
@@ -55,11 +57,14 @@ export type {
   CreateMasterProductRequest,
   CreatePriceListRequest,
   CreateProductUnitRequest,
+  InitialWarehouseStockRequest,
   LinkSupplierProductRequest,
   MasterProductDto,
   PriceListDto,
   PriceListItemDto,
+  ProductAvailabilityDto,
   ProductUnitDto,
+  ProductWarehouseStockBreakdownDto,
   SupplierProductDto,
 } from "./modules/catalog.service.js";
 

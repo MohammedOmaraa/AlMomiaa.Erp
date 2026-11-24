@@ -462,11 +462,137 @@ public sealed class CustomersModuleService(
             .Select(c => new CustomerDto(
                 c.Id, c.CustomerCode, c.NameAr, c.NameEn, c.Phone, c.Address, c.City, c.Category,
                 c.VatNumber, c.GradeId, c.Grade.GradeCode, c.PriceListId, c.CustomPaymentDays,
-                c.CreditLimit, c.CurrentBalance, c.AssignedRepId, c.Latitude, c.Longitude, c.IsActive))
+                c.CreditLimit, c.CurrentBalance, c.AssignedRepId, c.Latitude, c.Longitude, c.IsActive,
+                c.AssignedRep.EmployeeCode, c.AssignedRep.FullNameAr, c.AssignedRep.FullNameEn))
             .ToListAsync(ct);
 
         var nextCursor = (query.Page * query.PageSize) < total ? (query.Page + 1).ToString() : null;
         return new PagedResult<CustomerDto>(items, total, nextCursor);
+    }
+
+    public async Task<IReadOnlyList<SalesRepOptionDto>> GetSalesRepsAsync(CancellationToken ct)
+    {
+        var countsByRep = await db.Customers
+            .AsNoTracking()
+            .GroupBy(c => c.AssignedRepId)
+            .Select(g => new { RepId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.RepId, x => x.Count, ct);
+
+        var repUsers = await db.Users
+            .AsNoTracking()
+            .Where(u => u.IsActive && u.Roles.Any(ur =>
+                ur.Role.RoleCode == CanonicalRolesAndPermissions.Roles.SalesRep
+                || ur.Role.Permissions.Any(p => p.PermissionClaim == CanonicalRolesAndPermissions.Permissions.OrdersCreate)))
+            .Select(u => new
+            {
+                u.Id,
+                u.EmployeeCode,
+                u.FullNameAr,
+                u.FullNameEn,
+                u.Phone,
+                u.RepType,
+                IsSalesRep = u.Roles.Any(ur => ur.Role.RoleCode == CanonicalRolesAndPermissions.Roles.SalesRep)
+            })
+            .OrderByDescending(u => u.IsSalesRep)
+            .ThenBy(u => u.FullNameAr)
+            .ToListAsync(ct);
+
+        return repUsers
+            .Select(u => new SalesRepOptionDto(
+                u.Id,
+                u.EmployeeCode,
+                u.FullNameAr,
+                u.FullNameEn,
+                u.Phone,
+                u.RepType,
+                countsByRep.TryGetValue(u.Id, out var count) ? count : 0))
+            .ToList();
+    }
+
+    public async Task<CustomerDto> AssignCustomerRepAsync(AssignCustomerRepCommand command, CancellationToken ct)
+    {
+        var customer = await db.Customers
+            .Include(c => c.Grade)
+            .FirstOrDefaultAsync(c => c.Id == command.CustomerId, ct)
+            ?? throw new NotFoundException("Customer", command.CustomerId);
+
+        var assignedRep = await db.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == command.AssignedRepId, ct)
+            ?? throw new NotFoundException("User (AssignedRep)", command.AssignedRepId);
+
+        if (!assignedRep.IsActive)
+            throw new BusinessRuleException($"Assigned representative '{assignedRep.EmployeeCode}' is inactive.");
+
+        var previousRepId = customer.AssignedRepId;
+        customer.AssignRepresentative(assignedRep.Id);
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        AuditAndOutboxHelper.AppendAudit(
+            db,
+            currentUser,
+            "AssignCustomerRep",
+            "Customer",
+            customer.Id.ToString("D"),
+            new { AssignedRepId = previousRepId },
+            new { AssignedRepId = assignedRep.Id, assignedRep.EmployeeCode },
+            now);
+
+        await db.SaveChangesAsync(ct);
+
+        return new CustomerDto(
+            customer.Id, customer.CustomerCode, customer.NameAr, customer.NameEn, customer.Phone,
+            customer.Address, customer.City, customer.Category, customer.VatNumber, customer.GradeId,
+            customer.Grade.GradeCode, customer.PriceListId, customer.CustomPaymentDays, customer.CreditLimit,
+            customer.CurrentBalance, customer.AssignedRepId, customer.Latitude, customer.Longitude, customer.IsActive,
+            assignedRep.EmployeeCode, assignedRep.FullNameAr, assignedRep.FullNameEn);
+    }
+
+    public async Task<BulkAssignCustomersRepResponse> BulkAssignCustomersRepAsync(BulkAssignCustomersRepCommand command, CancellationToken ct)
+    {
+        var req = command.Request;
+        var assignedRep = await db.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == req.AssignedRepId, ct)
+            ?? throw new NotFoundException("User (AssignedRep)", req.AssignedRepId);
+
+        if (!assignedRep.IsActive)
+            throw new BusinessRuleException($"Assigned representative '{assignedRep.EmployeeCode}' is inactive.");
+
+        var distinctCustomerIds = req.CustomerIds.Distinct().ToArray();
+        var customers = await db.Customers
+            .Where(c => distinctCustomerIds.Contains(c.Id))
+            .ToListAsync(ct);
+
+        if (customers.Count != distinctCustomerIds.Length)
+        {
+            var foundSet = customers.Select(c => c.Id).ToHashSet();
+            var missingId = distinctCustomerIds.First(id => !foundSet.Contains(id));
+            throw new NotFoundException("Customer", missingId);
+        }
+
+        foreach (var customer in customers)
+        {
+            customer.AssignRepresentative(assignedRep.Id);
+        }
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        AuditAndOutboxHelper.AppendAudit(
+            db,
+            currentUser,
+            "BulkAssignCustomersRep",
+            "Customer",
+            "BULK",
+            null,
+            new { AssignedRepId = assignedRep.Id, assignedRep.EmployeeCode, CustomerIds = distinctCustomerIds },
+            now);
+
+        await db.SaveChangesAsync(ct);
+
+        return new BulkAssignCustomersRepResponse(
+            assignedRep.Id,
+            assignedRep.EmployeeCode,
+            assignedRep.FullNameAr,
+            customers.Count,
+            distinctCustomerIds);
     }
 
     public async Task<CustomerCreditStatusDto> GetCustomerCreditStatusAsync(Guid customerId, CancellationToken ct)
@@ -522,8 +648,11 @@ public sealed class CustomersModuleService(
         if (req.PriceListId.HasValue && !await db.PriceLists.AsNoTracking().AnyAsync(p => p.Id == req.PriceListId.Value, ct))
             throw new NotFoundException("PriceList", req.PriceListId.Value);
 
-        if (!await db.Users.AsNoTracking().AnyAsync(u => u.Id == req.AssignedRepId, ct))
-            throw new NotFoundException("User (AssignedRep)", req.AssignedRepId);
+        var assignedRep = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == req.AssignedRepId, ct)
+            ?? throw new NotFoundException("User (AssignedRep)", req.AssignedRepId);
+
+        if (!assignedRep.IsActive)
+            throw new BusinessRuleException($"Assigned representative '{assignedRep.EmployeeCode}' is inactive.");
 
         var customer = Customer.Create(
             normalizedCode, req.NameAr, req.NameEn, req.Phone, req.Address, req.City ?? "Riyadh",
@@ -531,14 +660,15 @@ public sealed class CustomersModuleService(
             req.CreditLimit, req.AssignedRepId, req.Latitude, req.Longitude);
 
         db.Customers.Add(customer);
-        AuditAndOutboxHelper.AppendAudit(db, currentUser, "CreateCustomer", "Customer", customer.Id.ToString("D"), null, new { customer.CustomerCode, customer.GradeId, customer.CreditLimit }, _clock.GetUtcNow().UtcDateTime);
+        AuditAndOutboxHelper.AppendAudit(db, currentUser, "CreateCustomer", "Customer", customer.Id.ToString("D"), null, new { customer.CustomerCode, customer.GradeId, customer.CreditLimit, customer.AssignedRepId }, _clock.GetUtcNow().UtcDateTime);
         await db.SaveChangesAsync(ct);
 
         return new CustomerDto(
             customer.Id, customer.CustomerCode, customer.NameAr, customer.NameEn, customer.Phone,
             customer.Address, customer.City, customer.Category, customer.VatNumber, customer.GradeId,
             grade.GradeCode, customer.PriceListId, customer.CustomPaymentDays, customer.CreditLimit,
-            customer.CurrentBalance, customer.AssignedRepId, customer.Latitude, customer.Longitude, customer.IsActive);
+            customer.CurrentBalance, customer.AssignedRepId, customer.Latitude, customer.Longitude, customer.IsActive,
+            assignedRep.EmployeeCode, assignedRep.FullNameAr, assignedRep.FullNameEn);
     }
 
     public async Task<IReadOnlyList<CustomerGradeDto>> GetGradesAsync(CancellationToken ct)

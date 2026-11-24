@@ -60,9 +60,12 @@
 ### 2.2 Customer & Credit Grades (`/api/v1/customers`)
 | HTTP | Route | Permission Claim Required | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/customers` | `customers:view` | Paginated list (auto-scoped to `AssignedRepId` for `SALES_REP`). |
+| `GET` | `/customers` | `customers:view` | Paginated list including assigned sales rep metadata (`AssignedRepCode`, `AssignedRepNameAr`, `AssignedRepNameEn`), auto-scoped to `AssignedRepId` for `SALES_REP`. |
 | `GET` | `/customers/{id}/credit-status` | `customers:view` | **Order Step 2:** Returns `CurrentBalance`, `OverdueDebt`, `CreditLimit`, `Grade (A/B/C/D)`, `PriceListId`, `EffectivePaymentDays`, and last 10 purchases. |
 | `POST` | `/customers` | `customers:manage` | Creates customer with Grade, Price List, Credit Limit, Category, and Assigned Representative. |
+| `GET` | `/customers/sales-reps` | `customers:view` | Lists active sales representatives with their live `AssignedCustomersCount` for rep-to-customer linking dropdowns. |
+| `PUT` | `/customers/{id}/assign-rep` | `customers:manage` | Reassigns a single customer to an active sales representative and records an immutable audit log entry. |
+| `POST` | `/customers/assign-rep/bulk` | `customers:manage` | Links one active sales representative to one or more customers in a single atomic transaction (`1 Rep -> Many Customers`). |
 | `GET` | `/customers/grades` | `customers:view` | Lists customer credit grades (A, B, C, D) and default payment periods. |
 | `PUT` | `/customers/grades` | `settings:manage` | Updates configurable payment periods for Grades A, B, C, and D. |
 
@@ -71,8 +74,9 @@
 | :--- | :--- | :--- | :--- |
 | `GET` / `POST` | `/catalog/categories` | `catalog:view` / `catalog:manage` | Gets hierarchical category tree or creates a category/subcategory. |
 | `GET` / `POST` | `/catalog/brands` | `catalog:view` / `catalog:manage` | Lists or creates product brands. |
-| `GET` / `POST` | `/catalog/products` | `catalog:view` / `catalog:manage` | Paginated Master Products list (cost masked for non-authorized roles) and multi-unit product creation. |
-| `GET` | `/catalog/categories/{categoryId}/products` | `catalog:view` | **Order Step 3:** Loads products under category with customer's resolved Price List price and real-time `AvailableQty`. |
+| `GET` / `POST` | `/catalog/products` | `catalog:view` / `catalog:manage` | Paginated Master Products list (cost masked for non-authorized roles) and multi-unit product creation with optional `InitialWarehouseStocks[]` per-warehouse opening stock allocation (`OpeningBalance` stock movements). |
+| `GET` | `/catalog/products/{id}/availability` | `catalog:view` | Returns product pricing tiers, units, **total stock across all warehouses** (`TotalPhysicalQty`, `TotalReservedQty`, `TotalIncomingQty`, `TotalAvailableQty`), and exact per-warehouse breakdown (`WarehouseStocks[]`) without exposing `WeightedAvgCost`. |
+| `GET` | `/catalog/categories/{categoryId}/products` | `catalog:view` | **Order Step 3:** Loads products under category with customer's resolved Price List price, `AvailableQty` (filtered warehouse or all warehouses total), `TotalAvailableQty`, and full per-warehouse breakdown (`WarehouseStocks[]`). |
 | `POST` | `/catalog/products/{id}/suppliers` | `catalog:manage` | Links a Supplier (`Supplier A` or `Supplier B`) to a single `MasterProduct`. |
 | `GET` / `POST` | `/catalog/price-lists` | `catalog:view` / `catalog:manage` | Manages dynamic tiered price lists (`Wholesale`, `Retail`, `KeyAccount`) (`MR-02`). |
 

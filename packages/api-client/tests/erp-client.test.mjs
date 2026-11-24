@@ -107,3 +107,43 @@ test("changePasswordRequestSchema enforces minimum length, difference, and confi
     false,
   );
 });
+
+test("catalog availability and customer rep-linking client endpoints hit canonical routes", async () => {
+  const captured = [];
+  const tokenStore = createAccessTokenStore();
+  tokenStore.setAccessToken("test-token");
+
+  const { http } = createApiClient({
+    baseURL: "/api/v1",
+    tokenStore,
+    adapter: async (config) => {
+      captured.push({ method: config.method?.toUpperCase(), url: config.url, data: config.data });
+      return {
+        data: {},
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      };
+    },
+  });
+
+  const erp = createErpApi(http);
+  await erp.catalog.getProductAvailability("01933c90-0000-7000-8000-000000000001");
+  await erp.customers.getSalesReps();
+  await erp.customers.assignCustomerRep("01933c90-0000-7000-8000-000000000002", "01933c90-0000-7000-8000-000000000003");
+  await erp.customers.bulkAssignCustomersRep({
+    assignedRepId: "01933c90-0000-7000-8000-000000000003",
+    customerIds: ["01933c90-0000-7000-8000-000000000002"],
+  });
+
+  assert.deepEqual(
+    captured.map((c) => `${c.method} ${c.url}`),
+    [
+      "GET /catalog/products/01933c90-0000-7000-8000-000000000001/availability",
+      "GET /customers/sales-reps",
+      "PUT /customers/01933c90-0000-7000-8000-000000000002/assign-rep",
+      "POST /customers/assign-rep/bulk",
+    ],
+  );
+});

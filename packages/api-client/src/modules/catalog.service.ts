@@ -48,6 +48,19 @@ export interface MasterProductDto {
   units: ProductUnitDto[];
 }
 
+export interface ProductWarehouseStockBreakdownDto {
+  warehouseId: number;
+  warehouseCode: string;
+  warehouseNameAr: string;
+  warehouseNameEn: string | null;
+  warehouseType: string;
+  physicalQty: number;
+  reservedQty: number;
+  incomingQty: number;
+  availableQty: number;
+  minReorderQty: number;
+}
+
 export interface CategoryProductPriceDto {
   masterProductId: string;
   sku: string;
@@ -57,6 +70,30 @@ export interface CategoryProductPriceDto {
   resolvedUnitPrice: number;
   minAllowedPrice: number;
   availableQty: number;
+  baseUnit?: string;
+  defaultUnitNameAr?: string;
+  defaultUnitNameEn?: string;
+  totalPhysicalQty?: number;
+  totalAvailableQty?: number;
+  warehouseStocks?: ProductWarehouseStockBreakdownDto[];
+}
+
+export interface ProductAvailabilityDto {
+  masterProductId: string;
+  sku: string;
+  nameAr: string;
+  nameEn: string | null;
+  baseUnit: string;
+  wholesaleSellingPrice: number;
+  retailSellingPrice: number;
+  minAllowedSellingPrice: number;
+  vatRate: number;
+  totalPhysicalQty: number;
+  totalReservedQty: number;
+  totalIncomingQty: number;
+  totalAvailableQty: number;
+  units: ProductUnitDto[];
+  warehouseStocks: ProductWarehouseStockBreakdownDto[];
 }
 
 export interface SupplierProductDto {
@@ -101,6 +138,12 @@ export interface CreateProductUnitRequest {
   isDefaultUnit: boolean;
 }
 
+export interface InitialWarehouseStockRequest {
+  warehouseId: number;
+  initialQty: number;
+  minReorderQty?: number;
+}
+
 export interface CreateMasterProductRequest {
   sku: string;
   barcode: string;
@@ -115,6 +158,7 @@ export interface CreateMasterProductRequest {
   minAllowedSellingPrice: number;
   vatRate: number;
   units: CreateProductUnitRequest[];
+  initialWarehouseStocks?: InitialWarehouseStockRequest[];
 }
 
 export interface LinkSupplierProductRequest {
@@ -150,6 +194,8 @@ export function createCatalogService(http: AxiosInstance) {
       (await http.get<PagedResult<MasterProductDto>>("/catalog/products", { params })).data,
     getCategoryProducts: async (categoryId: number, params?: { customerId?: string; warehouseId?: number; page?: number; pageSize?: number }) =>
       (await http.get<PagedResult<CategoryProductPriceDto>>(`/catalog/categories/${categoryId}/products`, { params })).data,
+    getProductAvailability: async (masterProductId: string) =>
+      (await http.get<ProductAvailabilityDto>(`/catalog/products/${masterProductId}/availability`)).data,
     createProduct: async (request: CreateMasterProductRequest) =>
       (await http.post<MasterProductDto>("/catalog/products", request)).data,
     linkSupplierProduct: async (masterProductId: string, request: LinkSupplierProductRequest) =>

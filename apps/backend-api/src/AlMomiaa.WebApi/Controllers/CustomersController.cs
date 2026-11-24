@@ -54,6 +54,45 @@ public sealed class CustomersController(IMediator mediator) : ControllerBase
     }
 
     [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.CustomersView)]
+    [HttpGet("sales-reps")]
+    [ProducesResponseType<IReadOnlyList<SalesRepOptionDto>>(StatusCodes.Status200OK)]
+    [EndpointSummary("List active sales representatives with their assigned customer counts")]
+    public async Task<ActionResult<IReadOnlyList<SalesRepOptionDto>>> GetSalesReps(CancellationToken ct)
+    {
+        var result = await mediator.Send(new GetSalesRepsQuery(), ct);
+        return Ok(result);
+    }
+
+    [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.CustomersManage)]
+    [HttpPut("{id:guid}/assign-rep")]
+    [ProducesResponseType<CustomerDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [EndpointSummary("Reassign a single customer to a sales representative")]
+    public async Task<ActionResult<CustomerDto>> AssignCustomerRep(
+        Guid id,
+        [FromBody] AssignCustomerRepRequest request,
+        CancellationToken ct)
+    {
+        var updated = await mediator.Send(new AssignCustomerRepCommand(id, request.AssignedRepId), ct);
+        return Ok(updated);
+    }
+
+    [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.CustomersManage)]
+    [HttpPost("assign-rep/bulk")]
+    [ProducesResponseType<BulkAssignCustomersRepResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [EndpointSummary("Link one sales representative to one or more customers in a single atomic transaction")]
+    public async Task<ActionResult<BulkAssignCustomersRepResponse>> BulkAssignCustomersRep(
+        [FromBody] BulkAssignCustomersRepRequest request,
+        CancellationToken ct)
+    {
+        var result = await mediator.Send(new BulkAssignCustomersRepCommand(request), ct);
+        return Ok(result);
+    }
+
+    [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.CustomersView)]
     [HttpGet("grades")]
     [ProducesResponseType<IReadOnlyList<CustomerGradeDto>>(StatusCodes.Status200OK)]
     [EndpointSummary("List customer credit grades (A, B, C, D) and default payment policies")]

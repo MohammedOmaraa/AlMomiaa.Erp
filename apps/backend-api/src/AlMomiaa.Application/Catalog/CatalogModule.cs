@@ -36,6 +36,18 @@ public sealed record MasterProductDto(
     bool IsActive,
     IReadOnlyList<ProductUnitDto> Units);
 
+public sealed record ProductWarehouseStockBreakdownDto(
+    int WarehouseId,
+    string WarehouseCode,
+    string WarehouseNameAr,
+    string? WarehouseNameEn,
+    string WarehouseType,
+    decimal PhysicalQty,
+    decimal ReservedQty,
+    decimal IncomingQty,
+    decimal AvailableQty,
+    decimal MinReorderQty);
+
 public sealed record CategoryProductPriceDto(
     Guid MasterProductId,
     string SKU,
@@ -44,7 +56,30 @@ public sealed record CategoryProductPriceDto(
     Guid DefaultUnitId,
     decimal ResolvedUnitPrice,
     decimal MinAllowedPrice,
-    decimal AvailableQty);
+    decimal AvailableQty,
+    string BaseUnit = "Piece",
+    string DefaultUnitNameAr = "حبة",
+    string DefaultUnitNameEn = "Piece",
+    decimal TotalPhysicalQty = 0m,
+    decimal TotalAvailableQty = 0m,
+    IReadOnlyList<ProductWarehouseStockBreakdownDto>? WarehouseStocks = null);
+
+public sealed record ProductAvailabilityDto(
+    Guid MasterProductId,
+    string SKU,
+    string NameAr,
+    string? NameEn,
+    string BaseUnit,
+    decimal WholesaleSellingPrice,
+    decimal RetailSellingPrice,
+    decimal MinAllowedSellingPrice,
+    decimal VatRate,
+    decimal TotalPhysicalQty,
+    decimal TotalReservedQty,
+    decimal TotalIncomingQty,
+    decimal TotalAvailableQty,
+    IReadOnlyList<ProductUnitDto> Units,
+    IReadOnlyList<ProductWarehouseStockBreakdownDto> WarehouseStocks);
 
 public sealed record SupplierProductDto(
     Guid Id,
@@ -74,6 +109,8 @@ public sealed record GetProductsQuery(string? Search, int? CategoryId, int? Bran
 public sealed record GetCategoryProductsQuery(int CategoryId, Guid? CustomerId, int? WarehouseId, int Page = 1, int PageSize = 50)
     : IRequest<PagedResult<CategoryProductPriceDto>>;
 
+public sealed record GetProductAvailabilityQuery(Guid MasterProductId) : IRequest<ProductAvailabilityDto>;
+
 public sealed record CreateProductUnitRequest(
     string UnitNameAr,
     string UnitNameEn,
@@ -83,6 +120,11 @@ public sealed record CreateProductUnitRequest(
     decimal RetailPrice,
     decimal MinAllowedPrice,
     bool IsDefaultUnit);
+
+public sealed record InitialWarehouseStockRequest(
+    int WarehouseId,
+    decimal InitialQty,
+    decimal MinReorderQty = 0m);
 
 public sealed record CreateMasterProductRequest(
     string SKU,
@@ -97,7 +139,8 @@ public sealed record CreateMasterProductRequest(
     decimal RetailSellingPrice,
     decimal MinAllowedSellingPrice,
     decimal VatRate,
-    CreateProductUnitRequest[] Units);
+    CreateProductUnitRequest[] Units,
+    InitialWarehouseStockRequest[]? InitialWarehouseStocks = null);
 
 public sealed record CreateMasterProductCommand(CreateMasterProductRequest Request) : IRequest<MasterProductDto>;
 
@@ -194,6 +237,17 @@ public sealed class CreateMasterProductCommandValidator : AbstractValidator<Crea
                 .LessThanOrEqualTo(u => u.WholesalePrice)
                 .LessThanOrEqualTo(u => u.RetailPrice);
         });
+
+        RuleFor(x => x.Request.InitialWarehouseStocks)
+            .Must(list => list is null || list.Select(i => i.WarehouseId).Distinct().Count() == list.Length)
+            .WithMessage("Duplicate WarehouseId entries are not allowed in InitialWarehouseStocks.");
+
+        RuleForEach(x => x.Request.InitialWarehouseStocks).ChildRules(ws =>
+        {
+            ws.RuleFor(w => w.WarehouseId).GreaterThan(0);
+            ws.RuleFor(w => w.InitialQty).GreaterThanOrEqualTo(0m);
+            ws.RuleFor(w => w.MinReorderQty).GreaterThanOrEqualTo(0m);
+        }).When(x => x.Request.InitialWarehouseStocks is not null);
     }
 }
 
@@ -260,6 +314,11 @@ public sealed class GetProductsHandler(ICatalogModuleService service) : IRequest
 public sealed class GetCategoryProductsHandler(ICatalogModuleService service) : IRequestHandler<GetCategoryProductsQuery, PagedResult<CategoryProductPriceDto>>
 {
     public Task<PagedResult<CategoryProductPriceDto>> Handle(GetCategoryProductsQuery request, CancellationToken ct) => service.GetCategoryProductsAsync(request, ct);
+}
+
+public sealed class GetProductAvailabilityHandler(ICatalogModuleService service) : IRequestHandler<GetProductAvailabilityQuery, ProductAvailabilityDto>
+{
+    public Task<ProductAvailabilityDto> Handle(GetProductAvailabilityQuery request, CancellationToken ct) => service.GetProductAvailabilityAsync(request.MasterProductId, ct);
 }
 
 public sealed class CreateMasterProductHandler(ICatalogModuleService service) : IRequestHandler<CreateMasterProductCommand, MasterProductDto>

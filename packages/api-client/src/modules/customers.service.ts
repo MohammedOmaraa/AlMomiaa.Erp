@@ -29,6 +29,27 @@ export interface CustomerDto {
   latitude: number | null;
   longitude: number | null;
   isActive: boolean;
+  assignedRepCode?: string | null;
+  assignedRepNameAr?: string | null;
+  assignedRepNameEn?: string | null;
+}
+
+export interface SalesRepOptionDto {
+  id: string;
+  employeeCode: string;
+  fullNameAr: string;
+  fullNameEn: string | null;
+  phone: string;
+  repType: string | null;
+  assignedCustomersCount: number;
+}
+
+export interface BulkAssignCustomersRepResponse {
+  assignedRepId: string;
+  assignedRepCode: string;
+  assignedRepNameAr: string;
+  updatedCount: number;
+  customerIds: string[];
 }
 
 export interface RecentCustomerOrderDto {
@@ -85,6 +106,12 @@ export function createCustomersService(http: AxiosInstance) {
       (await http.get<CustomerCreditStatusDto>(`/customers/${id}/credit-status`)).data,
     createCustomer: async (request: CreateCustomerRequest) =>
       (await http.post<CustomerDto>("/customers", request)).data,
+    getSalesReps: async () =>
+      (await http.get<SalesRepOptionDto[]>("/customers/sales-reps")).data,
+    assignCustomerRep: async (customerId: string, assignedRepId: string) =>
+      (await http.put<CustomerDto>(`/customers/${customerId}/assign-rep`, { assignedRepId })).data,
+    bulkAssignCustomersRep: async (request: { assignedRepId: string; customerIds: string[] }) =>
+      (await http.post<BulkAssignCustomersRepResponse>("/customers/assign-rep/bulk", request)).data,
     getGrades: async () =>
       (await http.get<CustomerGradeDto[]>("/customers/grades")).data,
     updateGrades: async (grades: UpdateCustomerGradeItem[]) =>

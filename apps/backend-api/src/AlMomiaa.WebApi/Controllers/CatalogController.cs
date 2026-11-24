@@ -87,12 +87,23 @@ public sealed class CatalogController(IMediator mediator) : ControllerBase
         return Ok(result);
     }
 
+    [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.CatalogView)]
+    [HttpGet("products/{id:guid}/availability")]
+    [ProducesResponseType<ProductAvailabilityDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [EndpointSummary("Get product total stock across all warehouses plus exact per-warehouse breakdown")]
+    public async Task<ActionResult<ProductAvailabilityDto>> GetProductAvailability(Guid id, CancellationToken ct)
+    {
+        var result = await mediator.Send(new GetProductAvailabilityQuery(id), ct);
+        return Ok(result);
+    }
+
     [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.CatalogManage)]
     [HttpPost("products")]
     [ProducesResponseType<MasterProductDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    [EndpointSummary("Create a master product with multi-unit definitions (Carton/Box/Piece)")]
+    [EndpointSummary("Create a master product with multi-unit definitions (Carton/Box/Piece) and optional initial per-warehouse stock allocations")]
     public async Task<ActionResult<MasterProductDto>> CreateProduct([FromBody] CreateMasterProductRequest request, CancellationToken ct)
     {
         var created = await mediator.Send(new CreateMasterProductCommand(request), ct);

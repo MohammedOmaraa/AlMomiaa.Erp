@@ -70,4 +70,14 @@ public sealed class Customer
 
     public void Debit(decimal amount) => CurrentBalance = Math.Round(CurrentBalance + amount, 2, MidpointRounding.AwayFromZero);
     public void Credit(decimal amount) => CurrentBalance = Math.Round(CurrentBalance - amount, 2, MidpointRounding.AwayFromZero);
+
+    public void AssignRepresentative(Guid repId)
+    {
+        if (repId == Guid.Empty)
+        {
+            throw new ArgumentException("AssignedRepId is required.", nameof(repId));
+        }
+
+        AssignedRepId = repId;
+    }
 }

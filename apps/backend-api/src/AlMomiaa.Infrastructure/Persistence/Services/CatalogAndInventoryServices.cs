@@ -112,11 +112,31 @@ public sealed class CatalogModuleService(
             .ToListAsync(ct);
 
         var productIds = products.Select(p => p.Id).ToArray();
-        var stockByProduct = query.WarehouseId.HasValue
+        var allStockRows = productIds.Length > 0
             ? await db.WarehouseStocks.AsNoTracking()
-                .Where(s => s.WarehouseId == query.WarehouseId.Value && productIds.Contains(s.MasterProductId))
-                .ToDictionaryAsync(s => s.MasterProductId, s => s.PhysicalQty - s.ReservedQty, ct)
-            : new Dictionary<Guid, decimal>();
+                .Where(s => productIds.Contains(s.MasterProductId))
+                .OrderBy(s => s.WarehouseId)
+                .Select(s => new
+                {
+                    s.MasterProductId,
+                    Breakdown = new ProductWarehouseStockBreakdownDto(
+                        s.WarehouseId,
+                        s.Warehouse.WarehouseCode,
+                        s.Warehouse.NameAr,
+                        s.Warehouse.NameEn,
+                        s.Warehouse.WarehouseType,
+                        s.PhysicalQty,
+                        s.ReservedQty,
+                        s.IncomingQty,
+                        s.PhysicalQty - s.ReservedQty,
+                        s.MinReorderQty)
+                })
+                .ToListAsync(ct)
+            : [];
+
+        var stocksByProduct = allStockRows
+            .GroupBy(x => x.MasterProductId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<ProductWarehouseStockBreakdownDto>)g.Select(x => x.Breakdown).ToList());
 
         var unitIds = products.SelectMany(p => p.Units).Select(u => u.Id).ToArray();
         var tierPrices = priceListId.HasValue
@@ -131,12 +151,81 @@ public sealed class CatalogModuleService(
             var defaultUnit = p.Units.FirstOrDefault(u => u.IsDefaultUnit) ?? p.Units.First();
             var tier = tierPrices.FirstOrDefault(t => t.ProductUnitId == defaultUnit.Id);
             var resolvedPrice = tier?.TierUnitPrice ?? defaultUnit.WholesalePrice;
-            var available = stockByProduct.TryGetValue(p.Id, out var qty) ? qty : 0m;
-            return new CategoryProductPriceDto(p.Id, p.SKU, p.NameAr, p.NameEn, defaultUnit.Id, resolvedPrice, defaultUnit.MinAllowedPrice, available);
+            var breakdown = stocksByProduct.TryGetValue(p.Id, out var list) ? list : [];
+            var totalPhysical = breakdown.Sum(s => s.PhysicalQty);
+            var totalAvailable = breakdown.Sum(s => s.AvailableQty);
+            var available = query.WarehouseId.HasValue
+                ? breakdown.FirstOrDefault(s => s.WarehouseId == query.WarehouseId.Value)?.AvailableQty ?? 0m
+                : totalAvailable;
+
+            return new CategoryProductPriceDto(
+                p.Id,
+                p.SKU,
+                p.NameAr,
+                p.NameEn,
+                defaultUnit.Id,
+                resolvedPrice,
+                defaultUnit.MinAllowedPrice,
+                available,
+                p.BaseUnit,
+                defaultUnit.UnitNameAr,
+                defaultUnit.UnitNameEn,
+                totalPhysical,
+                totalAvailable,
+                breakdown);
         }).ToList();
 
         var nextCursor = (query.Page * query.PageSize) < total ? (query.Page + 1).ToString() : null;
         return new PagedResult<CategoryProductPriceDto>(items, total, nextCursor);
+    }
+
+    public async Task<ProductAvailabilityDto> GetProductAvailabilityAsync(Guid masterProductId, CancellationToken ct)
+    {
+        var product = await db.MasterProducts
+            .AsNoTracking()
+            .Include(p => p.Units)
+            .FirstOrDefaultAsync(p => p.Id == masterProductId, ct)
+            ?? throw new NotFoundException("MasterProduct", masterProductId);
+
+        var warehouseStocks = await db.WarehouseStocks
+            .AsNoTracking()
+            .Where(s => s.MasterProductId == masterProductId)
+            .OrderBy(s => s.WarehouseId)
+            .Select(s => new ProductWarehouseStockBreakdownDto(
+                s.WarehouseId,
+                s.Warehouse.WarehouseCode,
+                s.Warehouse.NameAr,
+                s.Warehouse.NameEn,
+                s.Warehouse.WarehouseType,
+                s.PhysicalQty,
+                s.ReservedQty,
+                s.IncomingQty,
+                s.PhysicalQty - s.ReservedQty,
+                s.MinReorderQty))
+            .ToListAsync(ct);
+
+        var units = product.Units
+            .OrderByDescending(u => u.IsDefaultUnit)
+            .ThenBy(u => u.ConversionFactor)
+            .Select(u => new ProductUnitDto(u.Id, u.UnitNameAr, u.UnitNameEn, u.ConversionFactor, u.Barcode, u.WholesalePrice, u.RetailPrice, u.MinAllowedPrice, u.IsDefaultUnit))
+            .ToList();
+
+        return new ProductAvailabilityDto(
+            product.Id,
+            product.SKU,
+            product.NameAr,
+            product.NameEn,
+            product.BaseUnit,
+            product.WholesaleSellingPrice,
+            product.RetailSellingPrice,
+            product.MinAllowedSellingPrice,
+            product.VatRate,
+            warehouseStocks.Sum(w => w.PhysicalQty),
+            warehouseStocks.Sum(w => w.ReservedQty),
+            warehouseStocks.Sum(w => w.IncomingQty),
+            warehouseStocks.Sum(w => w.AvailableQty),
+            units,
+            warehouseStocks);
     }
 
     public async Task<MasterProductDto> CreateMasterProductAsync(CreateMasterProductCommand command, CancellationToken ct)
@@ -160,6 +249,20 @@ public sealed class CatalogModuleService(
         if (await db.ProductUnits.AsNoTracking().AnyAsync(u => unitBarcodes.Contains(u.Barcode), ct))
             throw new ConflictException("One or more ProductUnit barcodes already exist.");
 
+        if (req.InitialWarehouseStocks is { Length: > 0 })
+        {
+            var requestedWarehouseIds = req.InitialWarehouseStocks.Select(w => w.WarehouseId).Distinct().ToArray();
+            var existingWarehouseIds = await db.Warehouses.AsNoTracking()
+                .Where(w => requestedWarehouseIds.Contains(w.Id))
+                .Select(w => w.Id)
+                .ToListAsync(ct);
+
+            var missingWarehouseId = requestedWarehouseIds.FirstOrDefault(id => !existingWarehouseIds.Contains(id));
+            if (missingWarehouseId != 0)
+                throw new NotFoundException("Warehouse", missingWarehouseId);
+        }
+
+        var now = _clock.GetUtcNow().UtcDateTime;
         var product = MasterProduct.Create(
             sku, barcode, req.NameAr, req.NameEn, req.CategoryId, req.BrandId, req.BaseUnit,
             req.WeightedAvgCost, req.WholesaleSellingPrice, req.RetailSellingPrice, req.MinAllowedSellingPrice, req.VatRate);
@@ -172,7 +275,52 @@ public sealed class CatalogModuleService(
         }
 
         db.MasterProducts.Add(product);
-        AuditAndOutboxHelper.AppendAudit(db, currentUser, "CreateMasterProduct", "MasterProduct", product.Id.ToString("D"), null, new { product.SKU, product.MinAllowedSellingPrice }, _clock.GetUtcNow().UtcDateTime);
+
+        if (req.InitialWarehouseStocks is { Length: > 0 })
+        {
+            foreach (var entry in req.InitialWarehouseStocks)
+            {
+                var stock = WarehouseStock.Create(entry.WarehouseId, product.Id, entry.MinReorderQty);
+                if (entry.InitialQty > 0m)
+                {
+                    stock.ReceiveGoods(entry.InitialQty, 0m);
+                }
+
+                db.WarehouseStocks.Add(stock);
+
+                if (entry.InitialQty > 0m)
+                {
+                    db.StockMovements.Add(StockMovement.Append(
+                        entry.WarehouseId,
+                        product.Id,
+                        "OpeningBalance",
+                        entry.InitialQty,
+                        stock.PhysicalQty,
+                        product.WeightedAvgCost,
+                        "MasterProduct",
+                        product.Id,
+                        currentUser.UserId,
+                        now));
+                }
+            }
+        }
+
+        AuditAndOutboxHelper.AppendAudit(
+            db,
+            currentUser,
+            "CreateMasterProduct",
+            "MasterProduct",
+            product.Id.ToString("D"),
+            null,
+            new
+            {
+                product.SKU,
+                product.BaseUnit,
+                product.MinAllowedSellingPrice,
+                InitialWarehousesCount = req.InitialWarehouseStocks?.Length ?? 0,
+                TotalInitialQty = req.InitialWarehouseStocks?.Sum(s => s.InitialQty) ?? 0m
+            },
+            now);
         await db.SaveChangesAsync(ct);
 
         return new MasterProductDto(
