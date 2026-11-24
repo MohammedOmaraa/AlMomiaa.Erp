@@ -8,6 +8,7 @@ import axios, {
 import type { AccessTokenStore } from "../auth/access-token-store.js";
 import { authenticationResponseSchema } from "../auth/auth.schemas.js";
 import type { AuthenticationResponse } from "../auth/auth.types.js";
+import { createIdempotencyKey, redactSensitiveData, type ApiCallLog } from "../common/types.js";
 
 export interface ApiClientConfig {
   baseURL: string;
@@ -15,12 +16,14 @@ export interface ApiClientConfig {
   getLocale?: () => "ar-SA" | "en-US";
   onSessionRefreshed?: (session: AuthenticationResponse) => void;
   onAuthFailure?: () => void;
+  onApiCall?: (log: ApiCallLog) => void;
   timeoutMs?: number;
   adapter?: AxiosRequestConfig["adapter"];
 }
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & {
   _authRetried?: boolean;
+  _startedAtMs?: number;
 };
 
 const AUTH_PATHS = ["/auth/login", "/auth/refresh", "/auth/logout"];
@@ -28,6 +31,17 @@ const AUTH_PATHS = ["/auth/login", "/auth/refresh", "/auth/logout"];
 function isAuthPath(url: string | undefined): boolean {
   if (!url) return false;
   return AUTH_PATHS.some((path) => url.includes(path));
+}
+
+function parseMaybeJson(data: unknown): unknown {
+  if (typeof data === "string") {
+    try {
+      return JSON.parse(data) as unknown;
+    } catch {
+      return data;
+    }
+  }
+  return data;
 }
 
 export function createApiClient(config: ApiClientConfig): {
@@ -74,6 +88,9 @@ export function createApiClient(config: ApiClientConfig): {
   };
 
   http.interceptors.request.use((requestConfig: InternalAxiosRequestConfig) => {
+    const timedConfig = requestConfig as RetryableRequestConfig;
+    timedConfig._startedAtMs = Date.now();
+
     const headers = AxiosHeaders.from(requestConfig.headers);
     const locale = config.getLocale?.() ?? "ar-SA";
     headers.set("Accept-Language", locale);
@@ -90,7 +107,22 @@ export function createApiClient(config: ApiClientConfig): {
   });
 
   http.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      if (config.onApiCall) {
+        const req = response.config as RetryableRequestConfig;
+        config.onApiCall({
+          id: createIdempotencyKey(),
+          method: (req.method ?? "GET").toUpperCase(),
+          url: req.url ?? "",
+          status: response.status,
+          durationMs: req._startedAtMs ? Math.max(1, Date.now() - req._startedAtMs) : 0,
+          timestamp: new Date().toISOString(),
+          requestBody: req.data !== undefined ? redactSensitiveData(parseMaybeJson(req.data)) : undefined,
+          responseBody: redactSensitiveData(response.data),
+        });
+      }
+      return response;
+    },
     async (error: unknown) => {
       if (!(error instanceof AxiosError)) {
         throw error;
@@ -98,6 +130,23 @@ export function createApiClient(config: ApiClientConfig): {
 
       const originalRequest = error.config as RetryableRequestConfig | undefined;
       const status = error.response?.status;
+
+      if (config.onApiCall && originalRequest) {
+        config.onApiCall({
+          id: createIdempotencyKey(),
+          method: (originalRequest.method ?? "GET").toUpperCase(),
+          url: originalRequest.url ?? "",
+          status,
+          durationMs: originalRequest._startedAtMs ? Math.max(1, Date.now() - originalRequest._startedAtMs) : 0,
+          timestamp: new Date().toISOString(),
+          requestBody:
+            originalRequest.data !== undefined
+              ? redactSensitiveData(parseMaybeJson(originalRequest.data))
+              : undefined,
+          responseBody: redactSensitiveData(error.response?.data),
+          errorMessage: error.message,
+        });
+      }
 
       if (
         status !== 401 ||

@@ -1,19 +1,16 @@
 import { Meta } from "@storybook/blocks";
 
-<Meta title="Introduction" />
+<Meta title="AlMomiaa Design System/Introduction" />
 
-# AlMomiaa Design System
+# AlMomiaa ERP Design System Studio (`@almomiaa/ui`)
 
-A bilingual, RTL-first component library for AlMomiaa Trading Co. Shared React primitives and brand tokens live in `@almomiaa/ui`.
+Welcome to the standalone **AlMomiaa Enterprise ERP & DMS** component studio.
+Every component in `@almomiaa/ui` is **pure, prop-driven, framework-agnostic**, supports **Arabic RTL (`ar-SA`) & English LTR (`en-US`)** via logical Tailwind CSS properties, and adapts automatically to **Light & Dark themes** using the canonical Gold (`#CFA434`) & Obsidian (`#1C1B1A`) token system.
 
-## Brand and tokens
+## Component Inventory (24 Components)
 
-Import `@almomiaa/ui/tokens.css` once at the app root. Consume mapped tokens such as `bg-brand-gold`, `bg-surface-obsidian`, `text-text-primary`, and semantic `status-*` colors instead of defining local colors. Gold primary controls pair with obsidian text; dark surfaces pair inverse text with gold accents.
-
-## Direction and typography
-
-Use `dir="rtl"` and the Arabic font stack for Arabic content, or `dir="ltr"` and the Latin stack for English. Prefer logical inline spacing, borders, alignment, and placement. Each component's ArabicRTL and EnglishLTR stories demonstrate direction handling.
-
-## Themes and responsive previews
-
-Use the Theme toolbar to preview the light and dark token sets. The viewport toolbar provides 375px mobile, 768px tablet, and 1280px desktop previews. ResponsiveAppShell also documents desktop navigation, the medium compact rail, and mobile drawer states.
+- **Brand & Layout:** `BrandLogo`, `AppHeader`, `ResponsiveAppShell`, `Sidebar`, `SidebarNavItem`, `Tabs`
+- **Actions & Preferences:** `Button`, `IconButton`, `LocaleSwitcher`, `ThemeToggle`
+- **Forms:** `TextField`, `PasswordField`, `SelectField`, `TextareaField`
+- **Data Display & Inspection:** `DataTable`, `Badge`, `SummaryCard`, `SurfaceCard`, `KeyValueList`, `EmptyState`, `PaginationBar`, `JsonResponseViewer`
+- **Overlays & Feedback:** `DrawerModal`, `AlertBanner`

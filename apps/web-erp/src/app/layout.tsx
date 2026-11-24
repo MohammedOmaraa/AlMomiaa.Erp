@@ -3,13 +3,14 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import "@almomiaa/ui/tokens.css";
 import "./globals.css";
+import { ApiActivityProvider } from "../providers/ApiActivityProvider";
 import { AuthProvider } from "../providers/AuthProvider";
 import { LocaleProvider } from "../providers/LocaleProvider";
 import { ThemeProvider } from "../providers/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "المومياء | AlMomiaa ERP",
-  description: "AlMomiaa ERP workspace",
+  description: "AlMomiaa Enterprise ERP & DMS workspace",
 };
 
 type RootLayoutProps = Readonly<{ children: ReactNode }>;
@@ -25,7 +26,9 @@ export default async function RootLayout({ children }: RootLayoutProps) {
       <body>
         <ThemeProvider>
           <LocaleProvider initialLocale={locale}>
-            <AuthProvider>{children}</AuthProvider>
+            <ApiActivityProvider>
+              <AuthProvider>{children}</AuthProvider>
+            </ApiActivityProvider>
           </LocaleProvider>
         </ThemeProvider>
       </body>
