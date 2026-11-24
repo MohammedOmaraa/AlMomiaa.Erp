@@ -6,6 +6,7 @@ import "./globals.css";
 import { ApiActivityProvider } from "../providers/ApiActivityProvider";
 import { AuthProvider } from "../providers/AuthProvider";
 import { LocaleProvider } from "../providers/LocaleProvider";
+import { RealtimeProvider } from "../providers/RealtimeProvider";
 import { ThemeProvider } from "../providers/ThemeProvider";
 
 export const metadata: Metadata = {
@@ -27,7 +28,9 @@ export default async function RootLayout({ children }: RootLayoutProps) {
         <ThemeProvider>
           <LocaleProvider initialLocale={locale}>
             <ApiActivityProvider>
-              <AuthProvider>{children}</AuthProvider>
+              <AuthProvider>
+                <RealtimeProvider>{children}</RealtimeProvider>
+              </AuthProvider>
             </ApiActivityProvider>
           </LocaleProvider>
         </ThemeProvider>

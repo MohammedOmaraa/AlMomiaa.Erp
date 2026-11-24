@@ -20,6 +20,7 @@ import { en } from "../locales/en";
 import { useApiActivity } from "../providers/ApiActivityProvider";
 import { useAuth } from "../providers/AuthProvider";
 import { useLocale } from "../providers/LocaleProvider";
+import { useRealtime } from "../providers/RealtimeProvider";
 
 function NavIcon({ paths }: { paths: string[] }) {
   return (
@@ -73,6 +74,7 @@ export function ErpAppLayout({
   const { resolvedTheme, setTheme } = useTheme();
   const { status, user, logout } = useAuth();
   const { logs, inspectorOpen, setInspectorOpen, clearLogs } = useApiActivity();
+  const { hubState, toasts, dismissToast } = useRealtime();
   const [mounted, setMounted] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -187,6 +189,28 @@ export function ErpAppLayout({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                tone={
+                  hubState === "connected"
+                    ? "success"
+                    : hubState === "connecting" || hubState === "reconnecting"
+                      ? "warning"
+                      : "neutral"
+                }
+                size="sm"
+              >
+                {hubState === "connected"
+                  ? locale === "ar-SA"
+                    ? "إشعارات مباشرة"
+                    : "Live SignalR"
+                  : hubState === "reconnecting" || hubState === "connecting"
+                    ? locale === "ar-SA"
+                      ? "جاري الاتصال"
+                      : "Connecting"
+                    : locale === "ar-SA"
+                      ? "غير متصل"
+                      : "Offline"}
+              </Badge>
               {headerActions}
               <Button
                 variant="secondary"
@@ -209,6 +233,20 @@ export function ErpAppLayout({
               </Button>
             </div>
           </div>
+
+          {toasts.length > 0 && (
+            <div className="space-y-2" aria-live="polite">
+              {toasts.map((toast) => (
+                <AlertBanner
+                  key={toast.id}
+                  tone={toast.tone}
+                  title={toast.title}
+                  message={toast.message}
+                  onDismiss={() => dismissToast(toast.id)}
+                />
+              ))}
+            </div>
+          )}
 
           {!canAccessPage ? (
             <AlertBanner

@@ -112,6 +112,22 @@ export type {
   RoleDashboardDto,
 } from "./modules/operations.service.js";
 
+export {
+  computeJitteredReconnectDelay,
+  createOperationsHubClient,
+} from "./realtime/operations-hub.js";
+export type {
+  CreditCoApprovalRequiredEvent,
+  OperationsHubClient,
+  OperationsHubClientOptions,
+  OperationsHubEvent,
+  OperationsHubState,
+  OrderApprovedEvent,
+  OrderRejectedEvent,
+  OrderSubmittedEvent,
+  OrderUpdatedEvent,
+} from "./realtime/operations-hub.js";
+
 import { createUsersService } from "./modules/users.service.js";
 import { createCustomersService } from "./modules/customers.service.js";
 import { createCatalogService } from "./modules/catalog.service.js";

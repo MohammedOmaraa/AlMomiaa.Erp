@@ -12,10 +12,10 @@ namespace AlMomiaa.WebApi.Controllers;
 [Tags("Inventory & Warehouses")]
 public sealed class WarehousesController(IMediator mediator) : ControllerBase
 {
-    [Authorize(Policy = CanonicalRolesAndPermissions.Permissions.InventoryView)]
+    [Authorize(Policy = "WarehousesRead")]
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<WarehouseDto>>(StatusCodes.Status200OK)]
-    [EndpointSummary("List warehouses (scoped to assigned warehouses for Warehouse Keepers)")]
+    [EndpointSummary("List warehouses (scoped to assigned warehouses for Warehouse Keepers and Sales Reps)")]
     public async Task<ActionResult<IReadOnlyList<WarehouseDto>>> GetWarehouses(CancellationToken ct)
     {
         var result = await mediator.Send(new GetWarehousesQuery(), ct);

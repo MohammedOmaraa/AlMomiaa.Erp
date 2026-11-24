@@ -7,6 +7,7 @@ using AlMomiaa.Domain.Identity;
 using AlMomiaa.Infrastructure;
 using AlMomiaa.Infrastructure.Authentication;
 using AlMomiaa.Infrastructure.Persistence;
+using AlMomiaa.WebApi.Hubs;
 using AlMomiaa.WebApi.Middleware;
 using AlMomiaa.WebApi.Security;
 using AlMomiaa.WebApi.Services;
@@ -56,6 +57,8 @@ builder.Services.AddScoped<ICurrentUserService, HttpCurrentUserService>();
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IOperationsRealtimeNotifier, SignalROperationsRealtimeNotifier>();
 
 builder.Services
     .AddControllers()
@@ -137,6 +140,20 @@ builder.Services
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromSeconds(30)
         };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrWhiteSpace(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization(options =>
@@ -149,6 +166,12 @@ builder.Services.AddAuthorization(options =>
     {
         options.AddPolicy(permission, policy => policy.RequireClaim("permission", permission));
     }
+
+    options.AddPolicy("WarehousesRead", policy => policy.RequireAssertion(ctx =>
+        ctx.User.HasClaim("permission", CanonicalRolesAndPermissions.Permissions.InventoryView)
+        || ctx.User.HasClaim("permission", CanonicalRolesAndPermissions.Permissions.OrdersCreate)
+        || ctx.User.HasClaim("permission", CanonicalRolesAndPermissions.Permissions.OrdersApprove)
+        || ctx.User.HasClaim("permission", CanonicalRolesAndPermissions.Permissions.DashboardsInventory)));
 });
 
 var app = builder.Build();
@@ -303,6 +326,7 @@ app.UseSwaggerUI(options =>
 });
 
 app.MapControllers();
+app.MapHub<OperationsHub>("/hubs/operations").RequireCors("TrustedFrontend");
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy" })).AllowAnonymous();
 
 app.Run();

@@ -274,6 +274,23 @@ public sealed class InventoryModuleService(
             var assigned = currentUser.AssignedWarehouseIds;
             q = q.Where(w => assigned.Contains(w.Id));
         }
+        else if (currentUser.IsInRole(CanonicalRolesAndPermissions.Roles.SalesRep)
+            && !currentUser.IsInRole(CanonicalRolesAndPermissions.Roles.SuperAdmin)
+            && !currentUser.IsInRole(CanonicalRolesAndPermissions.Roles.ExecutiveManager)
+            && !currentUser.IsInRole(CanonicalRolesAndPermissions.Roles.SalesManager))
+        {
+            var allowed = currentUser.AssignedWarehouseIds.ToList();
+            if (currentUser.DefaultWarehouseId.HasValue && !allowed.Contains(currentUser.DefaultWarehouseId.Value))
+            {
+                allowed.Add(currentUser.DefaultWarehouseId.Value);
+            }
+
+            q = q.Where(w => w.IsActive);
+            if (allowed.Count > 0)
+            {
+                q = q.Where(w => allowed.Contains(w.Id) || w.AssignedRepId == currentUser.UserId);
+            }
+        }
 
         return await q.OrderBy(w => w.Id)
             .Select(w => new WarehouseDto(w.Id, w.WarehouseCode, w.NameAr, w.NameEn, w.WarehouseType, w.AssignedRepId, w.VehiclePlateNumber, w.City, w.IsActive))

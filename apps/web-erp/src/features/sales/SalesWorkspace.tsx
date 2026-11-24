@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import type { InvoicePrintDto, SalesOrderDto } from "@almomiaa/api-client";
+import type { InvoicePrintDto, SalesOrderDto, WarehouseDto } from "@almomiaa/api-client";
 import {
   AlertBanner,
   Badge,
   Button,
   DataTable,
   DrawerModal,
+  EmptyState,
   KeyValueList,
   PaginationBar,
   SelectField,
@@ -23,14 +24,24 @@ import { formatDateTime, formatSar } from "../../lib/formatters";
 import { hasPermission } from "../../lib/permissions";
 import { useAuth } from "../../providers/AuthProvider";
 import { useLocale } from "../../providers/LocaleProvider";
+import { useRealtime } from "../../providers/RealtimeProvider";
 
 export function SalesWorkspace() {
   const { locale } = useLocale();
   const { user } = useAuth();
+  const { eventVersion } = useRealtime();
   const isAr = locale === "ar-SA";
 
-  const [tab, setTab] = useState("orders");
+  const canReviewApprovals =
+    hasPermission(user, "orders:approve") ||
+    hasPermission(user, "orders:edit_submitted") ||
+    hasPermission(user, "orders:coapprove_credit");
+
+  const [tab, setTab] = useState(canReviewApprovals ? "pending" : "orders");
   const [orders, setOrders] = useState<SalesOrderDto[]>([]);
+  const [pendingOrders, setPendingOrders] = useState<SalesOrderDto[]>([]);
+  const [warehousesById, setWarehousesById] = useState<Record<number, WarehouseDto>>({});
+  const [reviewOrder, setReviewOrder] = useState<SalesOrderDto | null>(null);
   const [totalOrders, setTotalOrders] = useState(0);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
@@ -89,9 +100,26 @@ export function SalesWorkspace() {
   const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await erpApi.sales.getOrders({ status: statusFilter || undefined, page, pageSize: 25 });
+      const [res, pendingRes, whList] = await Promise.all([
+        erpApi.sales.getOrders({ status: statusFilter || undefined, page, pageSize: 25 }),
+        erpApi.sales.getOrders({ status: "PendingApproval", page: 1, pageSize: 50 }),
+        erpApi.inventory.getWarehouses().catch(() => [] as WarehouseDto[]),
+      ]);
       setOrders(res.items);
       setTotalOrders(res.totalCount);
+      setPendingOrders(pendingRes.items);
+      const map: Record<number, WarehouseDto> = {};
+      for (const w of whList) {
+        map[w.id] = w;
+      }
+      setWarehousesById(map);
+      setReviewOrder((prev) =>
+        prev
+          ? (pendingRes.items.find((o) => o.id === prev.id) ??
+              res.items.find((o) => o.id === prev.id) ??
+              null)
+          : null,
+      );
     } catch (err) {
       const f = formatApiError(err);
       setBanner({ tone: "danger", title: f.title, message: f.message, details: f.details });
@@ -102,7 +130,7 @@ export function SalesWorkspace() {
 
   useEffect(() => {
     void loadOrders();
-  }, [loadOrders]);
+  }, [loadOrders, eventVersion]);
 
   useEffect(() => {
     if (user && !dspDriverId) setDspDriverId(user.id);
@@ -266,12 +294,119 @@ export function SalesWorkspace() {
         activeId={tab}
         onChange={setTab}
         items={[
-          { id: "orders", label: isAr ? "طلبات المبيعات" : "Sales Orders", badge: totalOrders },
+          { id: "pending", label: isAr ? "طلبات بانتظار الاعتماد" : "Pending Approvals", badge: pendingOrders.length },
+          { id: "orders", label: isAr ? "كل طلبات المبيعات" : "All Sales Orders", badge: totalOrders },
           { id: "invoices", label: isAr ? "فواتير ZATCA و EGS" : "ZATCA Invoices & EGS" },
           { id: "returns", label: isAr ? "المرتجعات (Credit Note 381)" : "Sales Returns" },
           { id: "delivery", label: isAr ? "التوصيل و POD" : "Delivery & POD" },
         ]}
       />
+
+      {tab === "pending" && (
+        <SurfaceCard
+          title={isAr ? "طلبات مناديب المبيعات بانتظار الاعتماد" : "Incoming Field Rep Sell Requests (Pending Approval)"}
+          description={
+            isAr
+              ? "يتم التحديث تلقائياً عبر SignalR فور إرسال المندوب طلباً جديداً من تطبيق PWA"
+              : "Updates live via SignalR the moment a Sales Rep submits a request from the Rep PWA"
+          }
+        >
+          {pendingOrders.length === 0 && !loading ? (
+            <EmptyState
+              title={isAr ? "لا توجد طلبات معلّقة حالياً" : "No pending requests"}
+              description={
+                isAr
+                  ? "ستظهر هنا طلبات البيع الجديدة المرسلة من مناديب المبيعات تلقائياً."
+                  : "New sell requests submitted by Sales Reps will appear here automatically."
+              }
+            />
+          ) : (
+            <DataTable
+              columns={[
+                { key: "no", header: isAr ? "رقم الطلب" : "Order #", mono: true, render: (o) => o.orderNumber },
+                {
+                  key: "wh",
+                  header: isAr ? "المستودع / القناة" : "Warehouse / Channel",
+                  render: (o) => {
+                    const wh = warehousesById[o.warehouseId];
+                    return (
+                      <div className="space-y-0.5">
+                        <div className="text-sm font-medium text-text-primary">
+                          {wh ? (isAr ? wh.nameAr : (wh.nameEn ?? wh.nameAr)) : `#${o.warehouseId}`}
+                        </div>
+                        <Badge tone="info" size="sm">{o.orderChannel}</Badge>
+                      </div>
+                    );
+                  },
+                },
+                {
+                  key: "flags",
+                  header: isAr ? "تنبيهات الحوكمة" : "Governance Flags",
+                  render: (o) => (
+                    <div className="flex flex-wrap gap-1">
+                      {o.requiresFinanceCoApproval && (
+                        <Badge tone={o.financeCoApprovedByUserId ? "success" : "danger"} size="sm">
+                          MR-03 Credit
+                        </Badge>
+                      )}
+                      {o.hasPriceOverridePending && <Badge tone="warning" size="sm">MR-02 Price</Badge>}
+                      {o.hasStockShortage && <Badge tone="danger" size="sm">RISK-03 Shortage</Badge>}
+                      {!o.requiresFinanceCoApproval && !o.hasPriceOverridePending && !o.hasStockShortage && (
+                        <Badge tone="success" size="sm">{isAr ? "جاهز للاعتماد" : "Ready"}</Badge>
+                      )}
+                    </div>
+                  ),
+                },
+                {
+                  key: "tot",
+                  header: isAr ? "الإجمالي شامل الضريبة" : "Total (incl. VAT)",
+                  align: "end",
+                  numeric: true,
+                  render: (o) => formatSar(o.totalAmount, locale),
+                },
+                {
+                  key: "exp",
+                  header: isAr ? "انتهاء الحجز (24س)" : "Reservation TTL",
+                  render: (o) => formatDateTime(o.reservationExpiresAtUtc, locale),
+                },
+                {
+                  key: "decide",
+                  header: isAr ? "المراجعة والقرار" : "Review & Decide",
+                  render: (o) => (
+                    <div className="flex flex-wrap gap-1">
+                      <Button size="compact" variant="secondary" onClick={() => setReviewOrder(o)}>
+                        {isAr ? "مراجعة" : "Review"}
+                      </Button>
+                      {hasPermission(user, "orders:approve") && (
+                        <>
+                          <Button
+                            size="compact"
+                            disabled={submitting}
+                            onClick={() => void runOrderAction(isAr ? "تم اعتماد الطلب" : "Order Approved", () => erpApi.sales.approveOrder(o.id))}
+                          >
+                            {isAr ? "اعتماد" : "Approve"}
+                          </Button>
+                          <Button
+                            size="compact"
+                            variant="danger"
+                            disabled={submitting}
+                            onClick={() => setRejectOrderTarget(o)}
+                          >
+                            {isAr ? "رفض" : "Reject"}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  ),
+                },
+              ]}
+              rows={pendingOrders}
+              rowKey={(o) => o.id}
+              loading={loading}
+            />
+          )}
+        </SurfaceCard>
+      )}
 
       {tab === "orders" && (
         <SurfaceCard title={isAr ? "سجل طلبات المبيعات" : "Sales Orders Queue"}>
@@ -518,6 +653,120 @@ export function SalesWorkspace() {
         <form id="reject-order-form" onSubmit={handleRejectOrder} className="space-y-3">
           <TextareaField label={isAr ? "سبب الرفض" : "Rejection Reason"} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} required />
         </form>
+      </DrawerModal>
+
+      <DrawerModal
+        open={reviewOrder !== null}
+        onClose={() => setReviewOrder(null)}
+        title={isAr ? "مراجعة طلب المندوب واتخاذ القرار" : "Review Field Rep Request & Decide"}
+        subtitle={reviewOrder?.orderNumber}
+        size="lg"
+        footer={
+          reviewOrder ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {reviewOrder.status === "PendingApproval" && hasPermission(user, "orders:edit_submitted") && (
+                <Button
+                  variant="secondary"
+                  size="compact"
+                  onClick={() => {
+                    setEditOrder(reviewOrder);
+                    if (reviewOrder.items[0]) {
+                      setEditQty(String(reviewOrder.items[0].approvedQty));
+                      setEditPrice(String(reviewOrder.items[0].unitPrice));
+                    }
+                  }}
+                >
+                  {isAr ? "تعديل المدير" : "Manager Edit"}
+                </Button>
+              )}
+              {reviewOrder.hasPriceOverridePending && hasPermission(user, "orders:override_price") && (
+                <Button
+                  variant="secondary"
+                  size="compact"
+                  loading={submitting}
+                  onClick={() => void runOrderAction(isAr ? "تم اعتماد استثناء السعر" : "Price Override Approved", () => erpApi.sales.overrideOrderPrice(reviewOrder.id))}
+                >
+                  {isAr ? "اعتماد السعر (MR-02)" : "Override Price"}
+                </Button>
+              )}
+              {reviewOrder.requiresFinanceCoApproval && !reviewOrder.financeCoApprovedByUserId && hasPermission(user, "orders:coapprove_credit") && (
+                <Button
+                  variant="secondary"
+                  size="compact"
+                  loading={submitting}
+                  onClick={() => void runOrderAction(isAr ? "تمت الموافقة المالية" : "Credit Co-Approved", () => erpApi.sales.coApproveOrderCredit(reviewOrder.id))}
+                >
+                  {isAr ? "موافقة مالية (MR-03)" : "Co-Approve Credit"}
+                </Button>
+              )}
+              {reviewOrder.status === "PendingApproval" && hasPermission(user, "orders:approve") && (
+                <>
+                  <Button
+                    size="compact"
+                    loading={submitting}
+                    onClick={() => void runOrderAction(isAr ? "تم اعتماد الطلب" : "Order Approved", () => erpApi.sales.approveOrder(reviewOrder.id))}
+                  >
+                    {isAr ? "اعتماد الطلب" : "Approve Order"}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="compact"
+                    onClick={() => setRejectOrderTarget(reviewOrder)}
+                  >
+                    {isAr ? "رفض الطلب" : "Reject Order"}
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : undefined
+        }
+      >
+        {reviewOrder && (
+          <div className="space-y-4">
+            <KeyValueList
+              columns={2}
+              items={[
+                { id: "rev-status", label: isAr ? "الحالة" : "Status", value: <Badge tone="warning">{reviewOrder.status}</Badge> },
+                { id: "rev-channel", label: isAr ? "القناة" : "Channel", value: <Badge tone="info">{reviewOrder.orderChannel}</Badge> },
+                { id: "rev-wh", label: isAr ? "المستودع" : "Warehouse", value: warehousesById[reviewOrder.warehouseId]?.nameAr ?? `#${reviewOrder.warehouseId}` },
+                { id: "rev-total", label: isAr ? "الإجمالي شامل الضريبة" : "Total (incl. VAT)", value: <span className="font-bold tabular-nums">{formatSar(reviewOrder.totalAmount, locale)}</span> },
+                { id: "rev-bal", label: isAr ? "رصيد العميل عند الطلب" : "Customer Balance", value: <span className="tabular-nums">{formatSar(reviewOrder.customerBalanceAtOrder, locale)}</span> },
+                { id: "rev-lim", label: isAr ? "الحد الائتماني" : "Credit Limit", value: <span className="tabular-nums">{formatSar(reviewOrder.customerCreditLimitAtOrder, locale)}</span> },
+              ]}
+            />
+
+            {reviewOrder.requiresFinanceCoApproval && !reviewOrder.financeCoApprovedByUserId && (
+              <AlertBanner
+                tone="warning"
+                title="MR-03"
+                message={isAr ? "يتطلب هذا الطلب موافقة مالية مشتركة قبل الاعتماد النهائي." : "Requires Finance/Executive credit co-approval before final approval."}
+              />
+            )}
+
+            {reviewOrder.hasPriceOverridePending && (
+              <AlertBanner
+                tone="warning"
+                title="MR-02"
+                message={isAr ? "توجد أصناف بسعر أقل من قائمة الأسعار وتحتاج استثناء سعر." : "One or more lines are below tier price and require price override."}
+              />
+            )}
+
+            <div className="space-y-2">
+              {reviewOrder.items.map((item) => (
+                <div key={item.id} className="space-y-1 rounded-xl border border-surface-border bg-surface-canvas p-3 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-text-secondary" dir="ltr">{item.masterProductId}</span>
+                    <span className="font-bold tabular-nums text-text-primary">{formatSar(item.lineTotal, locale)}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 tabular-nums text-text-secondary">
+                    <span>{isAr ? "الكمية المطلوبة / المعتمدة" : "Ordered / Approved"}: {item.orderedQty} / {item.approvedQty}</span>
+                    <span>{isAr ? "سعر القائمة" : "Tier"}: {formatSar(item.standardTierPrice, locale)} • {isAr ? "المقترح" : "Unit"}: {formatSar(item.unitPrice, locale)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </DrawerModal>
 
       <DrawerModal

@@ -4,6 +4,7 @@ using AlMomiaa.Application.Common.Behaviors;
 using AlMomiaa.Infrastructure.Authentication;
 using AlMomiaa.Infrastructure.Persistence;
 using AlMomiaa.Infrastructure.Persistence.Services;
+using AlMomiaa.Infrastructure.Realtime;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -69,6 +70,7 @@ public static class DependencyInjection
         services.AddScoped<IRequestPermissionChecker, DefaultPermissionChecker>();
         services.AddScoped<IRequestAuditSink, LoggingRequestAuditSink>();
         services.AddScoped<ITransactionBoundary, PassthroughTransactionBoundary>();
+        services.AddSingleton<IOperationsRealtimeNotifier, NoOpOperationsRealtimeNotifier>();
 
         return services;
     }

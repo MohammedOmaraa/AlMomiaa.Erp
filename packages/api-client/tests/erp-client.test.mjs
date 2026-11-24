@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  computeJitteredReconnectDelay,
   createAccessTokenStore,
   createApiClient,
   createErpApi,
+  createOperationsHubClient,
   redactSensitiveData,
 } from "../dist/index.js";
 
@@ -63,4 +65,17 @@ test("idempotent ERP endpoints auto-attach X-Idempotency-Key GUID and emit redac
   assert.equal(capturedCalls.length, 2);
   assert.equal(capturedCalls[0].method, "POST");
   assert.equal(capturedCalls[0].status, 201);
+});
+
+test("computeJitteredReconnectDelay applies bounded jitter and createOperationsHubClient starts disconnected", () => {
+  assert.equal(computeJitteredReconnectDelay(0, () => 0.5), 200);
+  assert.equal(computeJitteredReconnectDelay(1, () => 0), 2000);
+  assert.equal(computeJitteredReconnectDelay(1, () => 1), 2500);
+  assert.equal(computeJitteredReconnectDelay(10, () => 0), 30000);
+
+  const client = createOperationsHubClient({
+    hubUrl: "/hubs/operations",
+    getAccessToken: () => "memory-token",
+  });
+  assert.equal(client.getState(), "disconnected");
 });

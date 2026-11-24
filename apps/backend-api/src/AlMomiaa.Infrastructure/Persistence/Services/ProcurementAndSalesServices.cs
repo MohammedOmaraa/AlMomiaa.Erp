@@ -298,7 +298,8 @@ public sealed class ProcurementModuleService(
 public sealed class SalesModuleService(
     AlMomiaaDbContext db,
     ICurrentUserService currentUser,
-    TimeProvider timeProvider) : ISalesModuleService
+    TimeProvider timeProvider,
+    IOperationsRealtimeNotifier realtimeNotifier) : ISalesModuleService
 {
     public async Task<PagedResult<SalesOrderDto>> GetSalesOrdersAsync(GetSalesOrdersQuery query, CancellationToken ct)
     {
@@ -522,6 +523,41 @@ public sealed class SalesModuleService(
         AuditAndOutboxHelper.AppendAudit(db, currentUser, "CreateSalesOrder", "SalesOrder", order.Id.ToString(), null, new { order.OrderNumber, order.TotalAmount, order.RequiresFinanceCoApproval, order.HasStockShortage, order.HasPriceOverridePending }, utcNow);
         await db.SaveChangesAsync(ct);
 
+        var repUser = await db.Users.AsNoTracking()
+            .Where(u => u.Id == order.RepId)
+            .Select(u => new { u.FullNameAr, u.FullNameEn, u.EmployeeCode })
+            .FirstOrDefaultAsync(ct);
+        var repDisplayName = repUser?.FullNameAr ?? repUser?.FullNameEn ?? repUser?.EmployeeCode ?? order.RepId.ToString("D");
+
+        await realtimeNotifier.NotifyOrderSubmittedAsync(
+            new OrderSubmittedNotification(
+                order.Id,
+                order.OrderNumber,
+                order.CustomerId,
+                order.RepId,
+                repDisplayName,
+                order.WarehouseId,
+                order.TotalAmount,
+                order.ExceededCreditWarning,
+                order.RequiresFinanceCoApproval,
+                order.HasStockShortage,
+                order.HasPriceOverridePending,
+                order.CreatedAtUtc),
+            ct);
+
+        if (order.RequiresFinanceCoApproval)
+        {
+            await realtimeNotifier.NotifyCreditCoApprovalRequiredAsync(
+                new CreditCoApprovalRequiredNotification(
+                    order.Id,
+                    order.OrderNumber,
+                    order.CustomerId,
+                    order.CustomerBalanceAtOrder,
+                    order.CustomerCreditLimitAtOrder,
+                    order.TotalAmount),
+                ct);
+        }
+
         return MapOrder(order);
     }
 
@@ -602,6 +638,10 @@ public sealed class SalesModuleService(
         AuditAndOutboxHelper.AppendAudit(db, currentUser, "ManagerEditSalesOrder", "SalesOrder", order.Id.ToString(), oldSnapshot, newSnapshot, utcNow);
         await db.SaveChangesAsync(ct);
 
+        await realtimeNotifier.NotifyOrderUpdatedAsync(
+            new OrderUpdatedNotification(order.Id, order.OrderNumber, order.RepId, order.Status, order.TotalAmount, "ManagerEdit"),
+            ct);
+
         return MapOrder(order);
     }
 
@@ -615,6 +655,10 @@ public sealed class SalesModuleService(
         AuditAndOutboxHelper.AppendAudit(db, currentUser, "OverrideOrderPrice", "SalesOrder", order.Id.ToString(), null, new { order.OrderNumber, order.HasPriceOverridePending }, utcNow);
         await db.SaveChangesAsync(ct);
 
+        await realtimeNotifier.NotifyOrderUpdatedAsync(
+            new OrderUpdatedNotification(order.Id, order.OrderNumber, order.RepId, order.Status, order.TotalAmount, "PriceOverrideApproved"),
+            ct);
+
         return MapOrder(order);
     }
 
@@ -627,6 +671,10 @@ public sealed class SalesModuleService(
         order.CoApproveCredit(currentUser.UserId, utcNow);
         AuditAndOutboxHelper.AppendAudit(db, currentUser, "CoApproveOrderCredit", "SalesOrder", order.Id.ToString(), null, new { order.OrderNumber, order.FinanceCoApprovedByUserId }, utcNow);
         await db.SaveChangesAsync(ct);
+
+        await realtimeNotifier.NotifyOrderUpdatedAsync(
+            new OrderUpdatedNotification(order.Id, order.OrderNumber, order.RepId, order.Status, order.TotalAmount, "CreditCoApproved"),
+            ct);
 
         return MapOrder(order);
     }
@@ -642,6 +690,10 @@ public sealed class SalesModuleService(
         AuditAndOutboxHelper.EnqueueOutbox(db, "OrderApproved", new { order.Id, order.OrderNumber, order.WarehouseId, order.TotalAmount }, utcNow);
         AuditAndOutboxHelper.AppendAudit(db, currentUser, "ApproveSalesOrder", "SalesOrder", order.Id.ToString(), null, new { order.OrderNumber, order.Status }, utcNow);
         await db.SaveChangesAsync(ct);
+
+        await realtimeNotifier.NotifyOrderApprovedAsync(
+            new OrderApprovedNotification(order.Id, order.OrderNumber, order.RepId, order.WarehouseId, order.TotalAmount, order.ApprovedAtUtc ?? utcNow),
+            ct);
 
         return MapOrder(order);
     }
@@ -670,6 +722,10 @@ public sealed class SalesModuleService(
         AuditAndOutboxHelper.EnqueueOutbox(db, "OrderRejected", new { order.Id, order.OrderNumber, order.RejectionReason }, utcNow);
         AuditAndOutboxHelper.AppendAudit(db, currentUser, "RejectSalesOrder", "SalesOrder", order.Id.ToString(), null, new { order.OrderNumber, order.RejectionReason }, utcNow);
         await db.SaveChangesAsync(ct);
+
+        await realtimeNotifier.NotifyOrderRejectedAsync(
+            new OrderRejectedNotification(order.Id, order.OrderNumber, order.RepId, order.RejectionReason ?? command.RejectionReason, utcNow),
+            ct);
 
         return MapOrder(order);
     }

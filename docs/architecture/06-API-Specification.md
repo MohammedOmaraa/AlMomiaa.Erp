@@ -78,7 +78,7 @@
 ### 2.4 Multi-Warehouse, Mobile Vans & Inventory (`/api/v1/warehouses`)
 | HTTP | Route | Permission Claim Required | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` / `POST` | `/warehouses` | `inventory:view` / `settings:manage` | Lists warehouses (ABAC-scoped for `WH_KEEPER`) or creates a `MainWarehouse`, `BranchWarehouse`, or `MobileVan`. |
+| `GET` / `POST` | `/warehouses` | `WarehousesRead` (`inventory:view`, `orders:create`, `orders:approve`, or `dashboards:inventory`) / `settings:manage` | Lists warehouses (ABAC-scoped for `WH_KEEPER` and `SALES_REP`) or creates a `MainWarehouse`, `BranchWarehouse`, or `MobileVan`. |
 | `GET` | `/warehouses/{id}/stocks` | `inventory:view` | Paginated `PhysicalQty`, `ReservedQty`, `IncomingQty`, and `AvailableQty` (supports `MainWarehouse`, `BranchWarehouse`, and `MobileVan`). |
 | `POST` | `/warehouses/transfers` | `inventory:transfer` | Creates an inter-warehouse or van-loading stock transfer (`Status = InTransit`). |
 | `PUT` | `/warehouses/transfers/{id}/receive` | `inventory:transfer` | Confirms receipt of transferred stock at destination warehouse/van. |
@@ -140,8 +140,9 @@
 - **Server-to-Client Events:**
   - `OrderSubmitted(orderId, orderNumber, repName, exceededCredit, hasStockShortage)` -> `role:SALES_MGR`
   - `CreditCoApprovalRequired(orderId, orderNumber, customerName, overdueAmount)` -> `role:ACCOUNTANT`, `role:EXEC_MGR`
-  - `OrderApproved(orderId, orderNumber, warehouseId, totalAmount)` -> `warehouse:{warehouseId}`, `role:PURCH_MGR`, `user:{repId}`
-  - `OrderRejected(orderId, orderNumber, reason)` -> `user:{repId}`
+  - `OrderApproved(orderId, orderNumber, repId, warehouseId, totalAmount, approvedAtUtc)` -> `warehouse:{warehouseId}`, `role:PURCH_MGR`, `role:SALES_MGR`, `role:SUPER_ADMIN`, `user:{repId}`
+  - `OrderRejected(orderId, orderNumber, repId, rejectionReason, rejectedAtUtc)` -> `user:{repId}`, `role:SALES_MGR`, `role:SUPER_ADMIN`
+  - `OrderUpdated(orderId, orderNumber, repId, status, totalAmount, changeType)` -> `user:{repId}`, `role:SALES_MGR`, `role:SUPER_ADMIN`
   - `FinancialKpiUpdated(safeCash, repCustodyCash, bankBalance, receivables)` -> `role:EXEC_MGR`, `role:SUPER_ADMIN`, `role:ACCOUNTANT`
   - `LowStockAlert(warehouseId, sku, productNameAr, availableQty, minReorderQty)` -> `role:PURCH_MGR`, `warehouse:{warehouseId}`
 
