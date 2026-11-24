@@ -22,7 +22,14 @@ public static class DependencyInjection
         services.AddDbContext<AlMomiaaDbContext>(options =>
             options.UseSqlServer(
                 configuration.GetConnectionString("SqlServer"),
-                sql => sql.MigrationsAssembly(typeof(AlMomiaaDbContext).Assembly.FullName)));
+                sql =>
+                {
+                    sql.MigrationsAssembly(typeof(AlMomiaaDbContext).Assembly.FullName);
+                    sql.EnableRetryOnFailure(
+                        maxRetryCount: 5,
+                        maxRetryDelay: TimeSpan.FromSeconds(10),
+                        errorNumbersToAdd: null);
+                }));
 
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<LoginRateLimitOptions>(configuration.GetSection(LoginRateLimitOptions.SectionName));
@@ -30,7 +37,8 @@ public static class DependencyInjection
         services.AddSingleton(TimeProvider.System);
 
         var redisConnectionString = configuration.GetValue<string>("Redis:ConnectionString");
-        if (isDevelopment && string.IsNullOrWhiteSpace(redisConnectionString))
+        var allowInMemoryFallback = configuration.GetValue<bool>("Redis:AllowInMemoryFallback", false);
+        if ((isDevelopment || allowInMemoryFallback) && string.IsNullOrWhiteSpace(redisConnectionString))
         {
             services.AddSingleton<ISecurityStampStore, InMemoryDevSecurityStampStore>();
             services.AddSingleton<ILoginAttemptLimiter, InMemoryDevLoginAttemptLimiter>();
@@ -41,7 +49,8 @@ public static class DependencyInjection
             {
                 if (string.IsNullOrWhiteSpace(redisConnectionString))
                 {
-                    throw new InvalidOperationException("Redis:ConnectionString configuration is required in non-Development environments.");
+                    throw new InvalidOperationException(
+                        "Redis:ConnectionString configuration is required in non-Development environments unless Redis:AllowInMemoryFallback=true is explicitly enabled for single-instance demo hosting.");
                 }
 
                 var redisOptions = ConfigurationOptions.Parse(redisConnectionString);

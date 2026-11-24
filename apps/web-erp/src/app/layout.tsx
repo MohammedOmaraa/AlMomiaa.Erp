@@ -11,6 +11,16 @@ import { ThemeProvider } from "../providers/ThemeProvider";
 export const metadata: Metadata = {
   title: "المومياء | AlMomiaa ERP",
   description: "AlMomiaa Enterprise ERP & DMS workspace",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icons/pwa-192x192.png",
+    apple: "/icons/pwa-192x192.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "AlMomiaa ERP",
+  },
 };
 
 type RootLayoutProps = Readonly<{ children: ReactNode }>;

@@ -1,172 +1,180 @@
-# PROMPT-0010: Multi-Warehouse Product Stock Allocation, Detailed Per-Unit Pricing & Packaging UX, Multi-Warehouse Availability Breakdown, and Sales Rep-to-Customer Linking
+# PROMPT-0011: Free HTTPS Cloud Demo Deployment Kit (Render.com Free Docker `.NET 9` API + Free External SQL Server + Vercel `web-erp` & Installable `rep-pwa`)
 
-- **Status:** `COMPLETED — ARCHIVED (docs/agent-ops/prompt-history/0010-product-multi-warehouse-pricing-and-rep-customer-linking.md)`
-- **Prompt ID:** `PROMPT-0010`
-- **Scope:** `apps/backend-api` (Catalog multi-warehouse opening stock & per-warehouse availability breakdown, Customer rep-assignment & sales-rep lookup endpoints + tests; zero SQL migration needed), `packages/api-client` (typed multi-warehouse product creation, availability breakdown, and rep-customer assignment APIs), `apps/web-erp` (`/catalog` enhanced product creation & availability breakdown + `/customers` rep dropdown & bulk rep-customer linking), `docs/architecture/06-API-Specification.md`
-- **Reference baseline:** Architecture v3.2 (`00-ADR`..`08-Development-Roadmap`); `PROMPT-0001`..`PROMPT-0009` completed (live `.NET 9` API + SignalR `/hubs/operations` on `:5000`, 45-table SQL Server `AlMomiaa`, 26/26 backend tests passing, 27 `@almomiaa/ui` components + 27 Storybook 8 stories, `@almomiaa/api-client` with 8/8 tests, `apps/web-erp` 11 routes on `:3000`, `apps/rep-pwa` on `:5173`)
+- **Status:** `COMPLETED — ARCHIVED (docs/agent-ops/prompt-history/0011-free-cloud-demo-deployment-kit.md)`
+- **Prompt ID:** `PROMPT-0011`
+- **Scope:** `apps/backend-api` (multi-stage production `Dockerfile`, `.dockerignore`, reverse-proxy `ForwardedHeaders`, comma-separated `Cors:AllowedOriginsCsv` support, opt-in `Database:AutoMigrateOnStartup`, opt-in `Redis:AllowInMemoryFallback` for single-instance demo containers, opt-in env-var-driven `DemoDataSeeder` + integration tests), `apps/web-erp` (`vercel.json`, `.env.example`, installable Web App Manifest & icons, clean `BACKEND_API_ORIGIN` / `NEXT_PUBLIC_SIGNALR_HUB_URL` wiring), `apps/rep-pwa` (`vercel.json`, serverless same-origin `/api/v1` & `/health` proxy for `HttpOnly; SameSite=Strict` cookies on Vercel, `.env.example`, iOS/Android PWA install meta verification), root `render.yaml` Blueprint, and `docs/deployment/FREE_CLOUD_DEMO_DEPLOYMENT_GUIDE.md`
+- **Reference baseline:** Architecture v3.2 (`00-ADR`..`08-Development-Roadmap`); `PROMPT-0001`..`PROMPT-0010` completed (live `.NET 9` API + SignalR `/hubs/operations`, 45-table SQL Server `AlMomiaa` with 4 EF Core migrations, 29/29 backend tests, 27 `@almomiaa/ui` components + 27 Storybook stories, `@almomiaa/api-client` 9/9 tests, `apps/web-erp` 11 routes, `apps/rep-pwa` Workbox PWA).
 - **Confirmed User Decisions:**
-  1. **Order of Execution:** Deliver Product Multi-Warehouse Stock, Detailed Unit Pricing, Availability Breakdown & Rep-Customer Linking FIRST (`PROMPT-0010`), followed by Free HTTPS Cloud Demo Deployment (`PROMPT-0011`: Vercel `web-erp`/`rep-pwa` + Render/Koyeb free `.NET 9` Docker backend + demo DB).
-  2. **Detailed Per-Unit Pricing & Multi-Unit Packaging:** Dynamic Base Unit selector (`Piece / حبة`, `Box / علبة`, `Carton / كرتون`, `Pallet / طبلية`) that clearly binds and explains `WAC`, `Min Allowed Floor`, `Wholesale Price`, and `Retail Price` per selected base unit (with 15% VAT preview & Arabic/English guidance) PLUS an optional **Additional Packaging Units** builder (e.g., `Carton = 24 Pieces`, `Pallet = 40 Cartons`) with auto-suggested and editable unit prices.
-  3. **Multi-Warehouse Product Allocation & Breakdown:** When creating a product, support selecting all warehouses (or any subset) and setting distinct opening stock quantities per warehouse (e.g., `100` in Warehouse 1, `40` in Warehouse 2). In **Price & Availability Lookup (`استعلام السعر والتوفر`)**, display **Total Available Qty across ALL warehouses** PLUS a full **per-warehouse stock breakdown** (`Physical`, `Reserved`, `Incoming`, `Available` for every warehouse).
-  4. **Rep-to-Customer Linking (`ربط مندوب بعميل أو أكثر`):** 1-to-Many model (`Customer.AssignedRepId` — zero DB migration needed): replace raw Rep GUID inputs with a live Sales Rep dropdown on Create Customer, add a per-customer "Change Rep" action, and add a bulk **"Assign Rep to 1 or More Customers"** drawer & atomic API endpoint.
+  1. **Free Hosting Stack:** **Vercel** (`apps/web-erp` Next.js 15 + `apps/rep-pwa` installable Vite Workbox PWA) + **Render.com Free Docker** (`.NET 9` API + SignalR `/hubs/operations`) — 100% free HTTPS URLs, no credit card required.
+  2. **Free External SQL Server:** **Azure SQL Free Offer / MonsterASP.NET / Somee** — preserves 100% canonical Microsoft SQL Server (`AlMomiaaDbContext`, all 4 existing migrations, 45 tables, computed columns, check constraints, filtered indexes, `ROWVERSION`) with zero EF Core provider rewrite, plus opt-in `Database:AutoMigrateOnStartup=true` to auto-initialize the cloud database on first boot.
+  3. **Opt-In Demo Seeder (Env-Var Controlled):** When `Demo:SeedEnabled=true` and `Demo:DefaultPassword` is provided via environment variable (never hardcoded in Git), idempotently seeds realistic demo warehouses, role accounts (`SUPER_ADMIN`, `SALES_MGR`, `SALES_REP`, `WH_KEEPER`), categories, brands, products with multi-warehouse stock, customers linked to the demo rep, financial accounts, open fiscal period, and ZATCA EGS device so every workflow can be tested immediately.
+  4. **In-Memory Session/Rate-Limit Fallback (Env-Var Controlled):** Opt-in `Redis:AllowInMemoryFallback=true` (default `false`) allows single-instance free Render containers to run without an external Redis account while preserving strict fail-closed Redis enforcement whenever `false` (default Production behavior).
 
 ---
 
 ## 1. Purpose of Prompt
 
-Eliminate pricing ambiguity, enable realistic multi-warehouse product distribution from day one, provide complete cross-warehouse stock visibility, and make linking field sales representatives (`SALES_REP`) to one or more customers fast and error-free:
-1. **Unambiguous Product Pricing & Multi-Unit Packaging (`/catalog`):** Users immediately see whether each price (`WAC`, `Min Allowed`, `Wholesale`, `Retail`) is for a **Piece (`حبة`)**, **Box (`علبة`)**, **Carton (`كرتون`)**, or **Pallet (`طبلية`)**, with clear Arabic/English explanations, VAT-inclusive previews, and optional multi-unit conversion packaging lines.
-2. **Multi-Warehouse Opening Stock Allocation (`POST /api/v1/catalog/products` + `/catalog`):** Users can check **"Select All Warehouses"** or pick specific warehouses and set exact initial stock quantities per warehouse (e.g. 50 in WH-01, 20 in WH-02), persisted atomically into `[inv].[WarehouseStocks]` and immutable `[inv].[StockMovements]` (`MovementType = "OpeningBalance"`).
-3. **Cross-Warehouse Availability Breakdown (`GET /api/v1/catalog/categories/{categoryId}/products` & `GET /api/v1/catalog/products/{id}/availability` + `/catalog`):** Show both the **grand total available across all warehouses** and the **exact stock inside each warehouse**.
-4. **Rep-to-Customer Linking (`GET /api/v1/customers/sales-reps`, `PUT /api/v1/customers/{id}/assign-rep`, `POST /api/v1/customers/assign-rep/bulk` + `/customers`):** Enable `SUPER_ADMIN` and `SALES_MGR` to assign a `SALES_REP` to one or multiple customers using human-readable rep names/codes (no raw GUIDs).
+Make **AlMomiaa ERP** (`apps/backend-api`, `apps/web-erp`, and installable `apps/rep-pwa`) 100% deployable to **free public HTTPS cloud infrastructure** for real-device demo and QA testing — **NOT development mode**, with:
+1. **Production-Grade, Installable Apps over HTTPS:**
+   - `apps/rep-pwa` deployed on Vercel HTTPS (`https://<rep-pwa>.vercel.app`) with Workbox Service Worker, Android/Chrome/Edge native **Install App** prompt, iOS **Add to Home Screen** meta/icons, and a same-origin Vercel API proxy (`/api/v1/*` -> `BACKEND_API_ORIGIN`) so `HttpOnly; Secure; SameSite=Strict` refresh cookies work without third-party cookie restrictions.
+   - `apps/web-erp` deployed on Vercel HTTPS (`https://<web-erp>.vercel.app`) with Next.js 15 rewrites (`/api/v1/*` & `/health` -> `BACKEND_API_ORIGIN`), SignalR over WSS (`NEXT_PUBLIC_SIGNALR_HUB_URL`), and an installable Web App Manifest (`manifest.webmanifest`) for desktop/tablet app-like launch.
+2. **Production `.NET 9` Docker Container for Render.com Free Tier:**
+   - Multi-stage non-root `Dockerfile` (`sdk:9.0` -> `aspnet:9.0`), listening on Render's dynamic `$PORT`, with `UseForwardedHeaders` for cloud TLS termination, `/health` liveness probe, and a root `render.yaml` Blueprint.
+   - Connects directly to any free external **Microsoft SQL Server** (`ConnectionStrings__SqlServer`) and optionally runs `Database.MigrateAsync()` + idempotent `DemoDataSeeder` on startup when explicitly opted in via environment variables.
+3. **Zero-Friction Step-by-Step Deployment Runbook:**
+   - Comprehensive Arabic + English guide (`docs/deployment/FREE_CLOUD_DEMO_DEPLOYMENT_GUIDE.md`) covering GitHub push, free SQL Server provisioning (MonsterASP.NET / Somee / Azure SQL Free), Render.com Docker setup, Vercel deployment of both monorepo apps, exact environment variable matrices, PWA installation steps on Android/iOS/Desktop, demo login credentials template, and Render cold-start notes.
 
 ---
 
 ## 2. Target Execution Agents and Order
 
 1. **`@Backend .NET`** —
-   - **A. Domain (`AlMomiaa.Domain`):**
-     - Add `AssignRepresentative(Guid repId)` to `Customer.cs` (validates `repId != Guid.Empty`).
-   - **B. Catalog Multi-Warehouse Opening Stock & Availability Breakdown (`AlMomiaa.Application/Catalog/` & `CatalogAndInventoryServices.cs` & `CatalogController.cs`):**
-     - Add `InitialWarehouseStockRequest(int WarehouseId, decimal InitialQty, decimal MinReorderQty = 0m)` and optional `InitialWarehouseStockRequest[]? InitialWarehouseStocks = null` on `CreateMasterProductRequest`.
-     - Extend `CreateMasterProductCommandValidator` to validate `InitialWarehouseStocks`: each `WarehouseId > 0`, `InitialQty >= 0`, `MinReorderQty >= 0`, and no duplicate `WarehouseId` values.
-     - In `CatalogModuleService.CreateMasterProductAsync`: when `InitialWarehouseStocks` is provided, verify all referenced warehouses exist (`NotFoundException` otherwise), create `WarehouseStock` rows (`WarehouseStock.Create(whId, product.Id, entry.MinReorderQty)`), call `stock.ReceiveGoods(entry.InitialQty, 0m)` when `entry.InitialQty > 0`, and append immutable `StockMovement.Append(whId, product.Id, "OpeningBalance", entry.InitialQty, stock.PhysicalQty, product.WeightedAvgCost, "MasterProduct", product.Id, currentUser.UserId, utcNow)` inside the same transaction!
-     - Add `ProductWarehouseStockBreakdownDto(int WarehouseId, string WarehouseCode, string WarehouseNameAr, string? WarehouseNameEn, string WarehouseType, decimal PhysicalQty, decimal ReservedQty, decimal IncomingQty, decimal AvailableQty, decimal MinReorderQty)`.
-     - Enrich `CategoryProductPriceDto` with:
-       - `BaseUnit` (`string`)
-       - `DefaultUnitNameAr` (`string`), `DefaultUnitNameEn` (`string`)
-       - `TotalPhysicalQty` (`decimal`), `TotalAvailableQty` (`decimal`)
-       - `WarehouseStocks` (`IReadOnlyList<ProductWarehouseStockBreakdownDto>`)
-       - Keep `AvailableQty` backward-compatible: equals the filtered `warehouseId`'s `AvailableQty` when `warehouseId` is specified, or `TotalAvailableQty` when `warehouseId` is `null` (All Warehouses)!
-     - Add `ProductAvailabilityDto(Guid MasterProductId, string SKU, string NameAr, string? NameEn, string BaseUnit, decimal WholesaleSellingPrice, decimal RetailSellingPrice, decimal MinAllowedSellingPrice, decimal VatRate, decimal TotalPhysicalQty, decimal TotalReservedQty, decimal TotalIncomingQty, decimal TotalAvailableQty, IReadOnlyList<ProductUnitDto> Units, IReadOnlyList<ProductWarehouseStockBreakdownDto> WarehouseStocks)` and `GetProductAvailabilityQuery(Guid MasterProductId)` exposed at `[Authorize(Policy = "catalog:view")] GET /api/v1/catalog/products/{id:guid}/availability`.
-   - **C. Sales Rep-to-Customer Assignment (`AlMomiaa.Application/Customers/` & `IamAndCustomersServices.cs` & `CustomersController.cs`):**
-     - Enrich `CustomerDto` with `string? AssignedRepCode = null`, `string? AssignedRepNameAr = null`, `string? AssignedRepNameEn = null` (populated via `AssignedRep` navigation in `GetCustomersAsync` and `CreateCustomerAsync`).
-     - Add `SalesRepOptionDto(Guid Id, string EmployeeCode, string FullNameAr, string? FullNameEn, string Phone, string? RepType, int AssignedCustomersCount)` and `GetSalesRepsQuery` exposed at `[Authorize(Policy = "customers:view")] GET /api/v1/customers/sales-reps` (returns active users holding `SALES_REP` role or `orders:create`, ordered by `FullNameAr`).
-     - Add `AssignCustomerRepRequest(Guid AssignedRepId)` + `AssignCustomerRepCommand(Guid CustomerId, Guid AssignedRepId)` exposed at `[Authorize(Policy = "customers:manage")] PUT /api/v1/customers/{id:guid}/assign-rep` (verifies target rep exists and is active, updates `Customer.AssignedRepId`, appends `[ops].[AuditLogs]` with old/new rep IDs, returns updated `CustomerDto`).
-     - Add `BulkAssignCustomersRepRequest(Guid AssignedRepId, Guid[] CustomerIds)` + `BulkAssignCustomersRepCommand` + `BulkAssignCustomersRepResponse(Guid AssignedRepId, string AssignedRepCode, string AssignedRepNameAr, int UpdatedCount, IReadOnlyList<Guid> CustomerIds)` exposed at `[Authorize(Policy = "customers:manage")] POST /api/v1/customers/assign-rep/bulk` (validates `CustomerIds` non-empty & max 200, verifies rep exists and is active, verifies all requested customers exist, updates all in one ACID transaction, appends `[ops].[AuditLogs]`).
-   - **D. Backend Tests (`CatalogWarehouseAndRepCustomerTests.cs`):**
-     - Creating a product with `InitialWarehouseStocks` across 2 warehouses creates `WarehouseStock` rows + `"OpeningBalance"` `StockMovements`, and `GET /catalog/products/{id}/availability` & `GET /catalog/categories/{catId}/products` return accurate `TotalAvailableQty` (`qty1 + qty2`) AND exact per-warehouse breakdown!
-     - `GET /customers/sales-reps` lists active `SALES_REP` accounts with assigned customer counts.
-     - `PUT /customers/{id}/assign-rep` and `POST /customers/assign-rep/bulk` reassign 1 or multiple customers to a `SALES_REP`, and the assigned `SALES_REP` immediately sees ONLY those assigned customers on `GET /api/v1/customers` (ABAC verified!).
-   - Sync `docs/architecture/06-API-Specification.md`.
+   - **A. Cloud Reverse-Proxy, CORS, Redis Fallback & Auto-Migrate (`apps/backend-api`):**
+     - Add `ForwardedHeadersOptions` (`XForwardedFor | XForwardedProto`, cleared `KnownNetworks`/`KnownProxies` when `Hosting:TrustForwardedHeaders=true` or in Production behind cloud proxy) early in `Program.cs` before `UseCors` / `UseAuthentication`.
+     - Enhance CORS origin loading in `Program.cs` and `TrustedOriginValidator.cs` to merge BOTH `Cors:AllowedOrigins` (array) AND optional comma/semicolon-separated `Cors:AllowedOriginsCsv` (e.g. `https://almomiaa-erp.vercel.app,https://almomiaa-rep.vercel.app`) while STILL rejecting `"*"` wildcard origins with `InvalidOperationException`.
+     - Update `DependencyInjection.cs`:
+       - Support opt-in `Redis:AllowInMemoryFallback` (`bool`, defaults to `false`).
+       - Use `InMemoryDevSecurityStampStore` + `InMemoryDevLoginAttemptLimiter` ONLY when `(isDevelopment || allowInMemoryFallback) && string.IsNullOrWhiteSpace(redisConnectionString)`. When `allowInMemoryFallback` is `false` in Production and `Redis:ConnectionString` is blank, continue throwing `InvalidOperationException` (preserving fail-closed security!).
+       - Configure `SqlServer` with `EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null)` for resilient cloud SQL Server connections over WAN.
+     - Add opt-in startup migration & demo seeding in `Program.cs` (guarded by `Database:AutoMigrateOnStartup=true` and `Demo:SeedEnabled=true`):
+       - Create `apps/backend-api/src/AlMomiaa.Infrastructure/Persistence/DemoDataSeeder.cs`:
+         - Reads `Demo:DefaultPassword` (must be >= 8 chars; refuses to run if missing — ZERO hardcoded passwords in source code!).
+         - Idempotently seeds (checking existence by unique code before inserting, safe across restarts):
+           1. 3 Warehouses: `WH-RYD-MAIN` (`MainWarehouse`, Riyadh), `WH-JED-BR` (`BranchWarehouse`, Jeddah), `VAN-RYD-01` (`MobileVan`, Riyadh).
+           2. 4 Demo Users (using `IPasswordHasher.HashPassword(defaultPassword)`):
+              - `ADMIN-DEMO` (`+966500000001`, role `SUPER_ADMIN`)
+              - `MGR-DEMO` (`+966500000002`, role `SALES_MGR`)
+              - `REP-DEMO` (`+966500000003`, role `SALES_REP`, `RepType = "PreSales"`, assigned & default warehouse `WH-RYD-MAIN`)
+              - `WHK-DEMO` (`+966500000004`, role `WH_KEEPER`, strictly 1 warehouse `WH-RYD-MAIN`)
+           3. 2 Categories (`مشروبات / Beverages`, `مواد غذائية / Foodstuffs`), 2 Brands (`المومياء الذهبية / AlMomiaa Gold`, `واحة الرياض / Riyadh Oasis`), 1 Default Price List (`PL-WHOLESALE-DEMO`).
+           4. 4 Master Products (with multi-unit `Piece` + `Carton` definitions) + multi-warehouse `WarehouseStock` allocations split across `WH-RYD-MAIN` and `WH-JED-BR` + `"OpeningBalance"` `StockMovements`.
+           5. 3 Customers (`CUST-DEMO-001` Grade A, `CUST-DEMO-002` Grade B, `CUST-DEMO-003` Grade C) linked to `REP-DEMO`.
+           6. Financial Accounts (`SAFE-MAIN` MainTreasurySafe, `BANK-SNB` BankAccount, `WALLET-REP-DEMO` RepCustodyWallet for `REP-DEMO`), an Open Fiscal Period for the current year/month, and 1 ZATCA EGS Device (`EGS-DEMO-01`) + 1 initial GPS ping for `REP-DEMO` in Riyadh so `/gps` renders a live pin immediately!
+       - Disable Swagger UI in Production ONLY if `Swagger:Enabled` is `false` (default `true` for demo convenience, or configurable via `Swagger:Enabled`).
+       - Enrich `GET /health` to return `{ status: "Healthy", environment, timestampUtc }` (anonymous, no sensitive info/connection strings!).
+   - **B. Container & Cloud Blueprint Files:**
+     - Create `apps/backend-api/Dockerfile` (multi-stage `mcr.microsoft.com/dotnet/sdk:9.0` build -> `mcr.microsoft.com/dotnet/aspnet:9.0` runtime, non-root `app` user, binds `http://+:${PORT:-10000}`, `DOTNET_EnableDiagnostics=0`).
+     - Create `apps/backend-api/.dockerignore` (excludes `bin/`, `obj/`, `tests/`, `.git/`, `*.user`, `appsettings.Development.json`).
+     - Create `apps/backend-api/.env.example` documenting all required Render environment variables with placeholder values (zero real secrets).
+     - Create root `render.yaml` Blueprint pointing to `apps/backend-api/Dockerfile` (plan `free`, `healthCheckPath: /health`, all env vars declared with `sync: false` for secrets!).
+   - **C. Backend Tests (`DemoDeploymentAndSeedTests.cs`):**
+     - Verify `DemoDataSeeder.SeedAsync` is idempotent (running twice creates exact expected warehouses, 4 demo users including single-warehouse `WH_KEEPER`, 4 products with multi-warehouse stocks, 3 customers linked to `REP-DEMO`, financial accounts, fiscal period, EGS device, and GPS ping without duplicating rows).
+     - Verify `DemoDataSeeder` rejects missing/weak `Demo:DefaultPassword`.
+     - Verify comma-separated `Cors:AllowedOriginsCsv` parses multiple HTTPS origins cleanly and still rejects wildcard `"*"`.
+     - Verify `Redis:AllowInMemoryFallback=false` still fails closed when Redis is missing in Production, while `true` succeeds with in-memory stores.
+
 2. **`@Frontend Engineer`** —
-   - **A. `@almomiaa/api-client` Updates:**
-     - Extend `CreateMasterProductRequest` (`initialWarehouseStocks`), `CategoryProductPriceDto` (`baseUnit`, `defaultUnitNameAr`, `defaultUnitNameEn`, `totalPhysicalQty`, `totalAvailableQty`, `warehouseStocks`), and add `ProductWarehouseStockBreakdownDto`, `ProductAvailabilityDto`, and `getProductAvailability(productId)` in `src/modules/catalog.service.ts`.
-     - Extend `CustomerDto` (`assignedRepCode`, `assignedRepNameAr`, `assignedRepNameEn`), add `SalesRepOptionDto`, `BulkAssignCustomersRepResponse`, `getSalesReps()`, `assignCustomerRep(customerId, assignedRepId)`, and `bulkAssignCustomersRep(assignedRepId, customerIds)` in `src/modules/customers.service.ts`.
-     - Export all new types from `src/index.ts` and add unit tests in `tests/erp-client.test.mjs`.
-   - **B. `apps/web-erp` `/catalog` (`CatalogWorkspace.tsx`) Overhaul:**
-     - **Create Product Drawer:**
-       - Add explicit **Base Unit selector** (`حبة / Piece`, `علبة / Box`, `كرتون / Carton`, `طبلية / Pallet`) and dynamically label every price input with the chosen base unit + rich Arabic/English helper text + live 15% VAT-inclusive preview:
-         - `تكلفة الشراء المتوسطة (WAC) لكل {unit}` — average purchase cost per 1 base unit (excl. VAT)
-         - `الحد الأدنى المسموح للبيع لكل {unit} (MR-02)` — minimum floor price per 1 base unit before manager override is required
-         - `سعر الجملة لكل {unit}` — default wholesale price per 1 base unit (excl. VAT)
-         - `سعر التجزئة لكل {unit}` — default retail price per 1 base unit (excl. VAT)
-       - Add **Additional Packaging Units (`وحدات التعبئة الإضافية`)** section: e.g. `+ إضافة وحدة (كرتون / طبلية / علبة)` with Unit Name (AR/EN), Conversion Factor (`كم {baseUnit} داخل الوحدة؟`), Barcode, and auto-computed editable Wholesale / Retail / Min Floor prices!
-       - Add **Warehouse Stock Allocation (`توزيع المخزون على المستودعات`)** section:
-         - Load all active warehouses via `erpApi.inventory.getWarehouses()`.
-         - Include **"Select All Warehouses (`تحديد الكل`)"** and **"Clear (`إلغاء التحديد`)"** buttons.
-         - For every warehouse, render a checkbox + warehouse name/code + **Initial Quantity (`الكمية الابتدائية بالوحدة الأساسية`)** + **Min Reorder (`حد إعادة الطلب`)** inputs — allowing different quantities per warehouse (e.g., 100 in WH-01, 40 in WH-02, 0 in WH-03)!
-     - **Master Products Table:**
-       - Clearly display the product's **Base Unit** badge (`حبة` / `كرتون` / `طبلية`), all packaging units count, and a **"Stock Breakdown (`توزيع المستودعات`)"** button opening the multi-warehouse availability drawer (`GET /catalog/products/{id}/availability`).
-     - **Price & Availability Lookup Tab (`استعلام السعر والتوفر`):**
-       - Replace the raw numeric Warehouse ID input with a real **Warehouse Dropdown** including **"All Warehouses (`جميع المستودعات`)"** as default!
-       - Display columns: `SKU`, `Product & Base Unit`, `Resolved Price (SAR)`, `Min Floor (MR-02)`, **`Total Available (All Warehouses)`** (`الكمية الكلية المتاحة`), **`Per-Warehouse Breakdown`** (compact badges showing exact available quantity in each warehouse, e.g., `WH-01: 100`, `WH-02: 40`), and a **"Full Breakdown"** drawer button showing `Physical`, `Reserved`, `Incoming`, `Available`, `Min Reorder` per warehouse + all packaging unit prices!
-   - **C. `apps/web-erp` `/customers` (`CustomersWorkspace.tsx`) Overhaul:**
-     - Load active sales reps via `erpApi.customers.getSalesReps()`.
-     - Replace raw `Assigned Rep GUID` input in **Create Customer Drawer** with a clear **Sales Rep Select Dropdown** (`EmployeeCode — Name (current customers count)`).
-     - Show the assigned **Sales Rep Name & Code** in the Customers Table (no raw GUID!) plus a **"Change Rep (`تغيير المندوب`)"** button per row.
-     - Add a header button **"Assign Rep to Customers (`ربط مندوب بعملاء`)"** opening a dedicated bulk linking drawer:
-       - Select **1 Sales Rep** from dropdown.
-       - Search & check **1 or more customers** (with "Select All Shown" / "Clear Selection" toggles and live selected count badge).
-       - Submit `POST /api/v1/customers/assign-rep/bulk` and refresh both the Customers table and Sales Rep customer counts!
+   - **A. `apps/web-erp` Vercel Production Deployment & Installability:**
+     - Add `apps/web-erp/vercel.json` configured for pnpm monorepo root build (`buildCommand`, `installCommand`, security headers `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`).
+     - Add `apps/web-erp/.env.example` documenting `BACKEND_API_ORIGIN`, `NEXT_PUBLIC_SIGNALR_HUB_URL`, and optional `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`.
+     - Add `apps/web-erp/public/manifest.webmanifest` + copy PWA PNG icons (`apps/web-erp/public/icons/pwa-192x192.png`, `pwa-512x512.png` from `apps/rep-pwa/public/icons/`) and link `manifest` + `appleWebApp` metadata in `apps/web-erp/src/app/layout.tsx` so `web-erp` is installable as a standalone desktop/tablet web app.
+     - Update `apps/web-erp/next.config.ts` to keep `/api/v1/:path*` and `/health` rewrites clean and resilient when `BACKEND_API_ORIGIN` is set on Vercel.
+   - **B. `apps/rep-pwa` Vercel Production Deployment & Same-Origin Cookie Proxy:**
+     - Add `apps/rep-pwa/api/[...path].ts` (Vercel Node/Web-standard serverless proxy function) that forwards `/api/v1/*` and `/health` to `process.env.BACKEND_API_ORIGIN`, preserving HTTP method, request body, `Authorization`, `Cookie`, `Accept-Language`, `X-Idempotency-Key`, and forwarding `Set-Cookie` headers back to the browser same-origin (so `HttpOnly; Secure; SameSite=Strict` refresh cookies work seamlessly on Android/iOS/Desktop PWAs!). Rejects non-`/api/` & non-`/health` paths to prevent open-proxy SSRF!
+     - Add `apps/rep-pwa/vercel.json` routing `/api/(.*)` -> `/api/$1`, `/health` -> `/api/health`, and SPA fallback `/(.*)` -> `/index.html` (excluding static assets, `manifest.webmanifest`, `sw.js`, `workbox-*.js`, `icons/*`) plus security headers.
+     - Add `apps/rep-pwa/.env.example` documenting `BACKEND_API_ORIGIN` and `VITE_SIGNALR_HUB_URL`.
+     - Verify `apps/rep-pwa/index.html` includes `apple-touch-icon`, `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, and `theme-color` meta tags for full iOS & Android PWA installation.
+   - **C. Deployment Guide (`docs/deployment/FREE_CLOUD_DEMO_DEPLOYMENT_GUIDE.md`):**
+     - Clear bilingual (Arabic + English) step-by-step instructions covering:
+       1. Free external SQL Server setup (MonsterASP.NET free tier & Azure SQL Free Offer connection string format).
+       2. Deploying `apps/backend-api` on Render.com Free Docker (using `render.yaml` or manual Docker Web Service) + exact env vars table.
+       3. Deploying `apps/web-erp` on Vercel (Root Directory: `apps/web-erp`) + exact env vars.
+       4. Deploying `apps/rep-pwa` on Vercel (Root Directory: `apps/rep-pwa`) + exact env vars.
+       5. Updating Render `Cors__AllowedOriginsCsv` with both live `https://*.vercel.app` URLs.
+       6. Installing `AlMomiaa Rep` PWA on Android Chrome, iPhone Safari, and Windows/Mac Chrome/Edge.
+       7. Demo accounts table (`ADMIN-DEMO`, `MGR-DEMO`, `REP-DEMO`, `WHK-DEMO`) + Render free-tier cold-start / optional free UptimeRobot keep-alive tip.
+
 3. **`@QA & Security Auditor`** —
-   - Verify `dotnet build` (0 warnings, 0 errors), `dotnet test` (all 26 existing + new `CatalogWarehouseAndRepCustomerTests` passing), `pnpm -r typecheck`, `pnpm -r lint`, `@almomiaa/api-client` tests, `apps/rep-pwa` build (ensuring enriched `CategoryProductPriceDto` remains 100% backward compatible in `rep-pwa`!), and `apps/web-erp` Next.js 15 production build.
-   - Verify static rules: zero hardcoded hex colors, zero directional Tailwind classes (`ml-`/`mr-`/`pl-`/`pr-`/`left-`/`right-`/`text-left`/`text-right`), zero `any`/`@ts-ignore`, cost masking (`WeightedAvgCost == null` for `SALES_REP`) still intact, and ABAC row scoping (`SALES_REP` sees only newly assigned customers) verified!
-4. **`@Orchestrator`** — Archive as `docs/agent-ops/prompt-history/0010-product-multi-warehouse-pricing-and-rep-customer-linking.md`, update `docs/agent-ops/PROJECT_LOG.md`, and mark `CURRENT_PROMPT.md` completed only after QA returns `PASS`.
+   - Verify `dotnet build` (0 warnings, 0 errors) & `dotnet test` (all 29 existing + new `DemoDeploymentAndSeedTests` passing).
+   - Verify `pnpm -r typecheck`, `pnpm -r lint`, `apps/rep-pwa` production Vite + Workbox PWA build (confirming `dist/manifest.webmanifest` & `dist/sw.js` generated), and `apps/web-erp` Next.js 15 production build.
+   - Verify security invariants:
+     - ZERO hardcoded passwords, JWT signing keys, SQL Server passwords, or API keys committed in `render.yaml`, `Dockerfile`, `.env.example`, `DemoDataSeeder.cs`, or `vercel.json`.
+     - `apps/rep-pwa/api/[...path].ts` strictly allows ONLY `/api/v1/*` and `/health` paths against `BACKEND_API_ORIGIN` (no SSRF / arbitrary URL forwarding) and never logs `Authorization` or `Cookie` headers.
+     - `Cors:AllowedOriginsCsv` still forbids `*` wildcard.
+     - `Redis:AllowInMemoryFallback` defaults to `false`.
+     - `Demo:SeedEnabled` and `Database:AutoMigrateOnStartup` default to `false`.
+
+4. **`@Orchestrator`** — Archive as `docs/agent-ops/prompt-history/0011-free-cloud-demo-deployment-kit.md`, update `docs/agent-ops/PROJECT_LOG.md`, and mark `CURRENT_PROMPT.md` completed only after QA returns `PASS`.
 
 ---
 
 ## 3. Target Files to Create / Modify
 
 ### `apps/backend-api/`
-- `src/AlMomiaa.Domain/Customers/Customer.cs` (modify — add `AssignRepresentative(Guid repId)`)
-- `src/AlMomiaa.Application/Catalog/CatalogModule.cs` (modify — add `InitialWarehouseStockRequest`, `ProductWarehouseStockBreakdownDto`, `ProductAvailabilityDto`, `GetProductAvailabilityQuery`, extend `CreateMasterProductRequest` & `CategoryProductPriceDto`, validators & handlers)
-- `src/AlMomiaa.Application/Customers/CustomersModule.cs` (modify — add `SalesRepOptionDto`, `GetSalesRepsQuery`, `AssignCustomerRepRequest`/`Command`, `BulkAssignCustomersRepRequest`/`Command`/`Response`, enrich `CustomerDto`, validators & handlers)
-- `src/AlMomiaa.Application/Common/Abstractions/ModuleServices.cs` (modify — add new methods on `ICatalogModuleService` & `ICustomersModuleService`)
-- `src/AlMomiaa.Infrastructure/Persistence/Services/CatalogAndInventoryServices.cs` (modify — allocate initial stocks + `"OpeningBalance"` `StockMovements` on `CreateMasterProductAsync`, return multi-warehouse breakdown in `GetCategoryProductsAsync` & `GetProductAvailabilityAsync`)
-- `src/AlMomiaa.Infrastructure/Persistence/Services/IamAndCustomersServices.cs` (modify — include rep names on `CustomerDto`, implement `GetSalesRepsAsync`, `AssignCustomerRepAsync`, `BulkAssignCustomersRepAsync`)
-- `src/AlMomiaa.WebApi/Controllers/CatalogController.cs` (modify — add `GET /api/v1/catalog/products/{id:guid}/availability`)
-- `src/AlMomiaa.WebApi/Controllers/CustomersController.cs` (modify — add `GET /api/v1/customers/sales-reps`, `PUT /api/v1/customers/{id:guid}/assign-rep`, `POST /api/v1/customers/assign-rep/bulk`)
-- `tests/AlMomiaa.AuthenticationTests/CatalogWarehouseAndRepCustomerTests.cs` (new)
-
-### `packages/api-client/`
-- `src/modules/catalog.service.ts` (modify — multi-warehouse stock requests/breakdowns + `getProductAvailability`)
-- `src/modules/customers.service.ts` (modify — rep metadata + `getSalesReps`, `assignCustomerRep`, `bulkAssignCustomersRep`)
-- `src/index.ts` & `tests/erp-client.test.mjs` (modify)
+- `Dockerfile` (new — multi-stage `.NET 9` production image for Render/Docker)
+- `.dockerignore` (new)
+- `.env.example` (new — Render env var template, zero secrets)
+- `src/AlMomiaa.Infrastructure/DependencyInjection.cs` (modify — SQL retry resiliency + opt-in `Redis:AllowInMemoryFallback`)
+- `src/AlMomiaa.Infrastructure/Persistence/DemoDataSeeder.cs` (new — idempotent opt-in demo data & role accounts seeder)
+- `src/AlMomiaa.WebApi/Security/TrustedOriginValidator.cs` (modify — support `AllowedOriginsCsv` alongside `AllowedOrigins`)
+- `src/AlMomiaa.WebApi/Program.cs` (modify — `ForwardedHeaders`, `Cors:AllowedOriginsCsv`, opt-in `Database:AutoMigrateOnStartup`, opt-in `Demo:SeedEnabled`, enriched `/health`)
+- `tests/AlMomiaa.AuthenticationTests/DemoDeploymentAndSeedTests.cs` (new)
 
 ### `apps/web-erp/`
-- `src/features/catalog/CatalogWorkspace.tsx` (modify — dynamic Base Unit + detailed Arabic/English per-unit price labels & hints + VAT preview + Additional Packaging Units builder + multi-warehouse Select All / per-warehouse opening stock inputs + cross-warehouse Total & Per-Warehouse Availability Lookup + Breakdown Drawer)
-- `src/features/customers/CustomersWorkspace.tsx` (modify — live Sales Rep dropdown on Create Customer, assigned rep name display, single "Change Rep" drawer, and bulk "Assign Rep to 1+ Customers" drawer)
+- `vercel.json` (new)
+- `.env.example` (new)
+- `public/manifest.webmanifest` (new)
+- `public/icons/pwa-192x192.png` & `public/icons/pwa-512x512.png` (new — copied from `apps/rep-pwa/public/icons/`)
+- `src/app/layout.tsx` (modify — register Web App Manifest & `appleWebApp` metadata)
 
-### `docs/architecture/`
-- `06-API-Specification.md` (sync new Catalog availability & Customer rep-assignment endpoints)
+### `apps/rep-pwa/`
+- `vercel.json` (new)
+- `api/[...path].ts` (new — secure same-origin proxy to `BACKEND_API_ORIGIN` for `/api/v1/*` & `/health`)
+- `.env.example` (new)
+- `index.html` (verify/enhance iOS & Android PWA install meta tags)
+
+### Root & Docs
+- `render.yaml` (new — Render.com Free Docker Blueprint)
+- `docs/deployment/FREE_CLOUD_DEMO_DEPLOYMENT_GUIDE.md` (new — complete bilingual deployment & PWA installation runbook)
 
 ---
 
-## 4. Frontend & Backend Data Schema
+## 4. Environment Variable Contract (Zero Secrets in Git)
 
-### Product Creation with Multi-Warehouse Initial Stock (`POST /api/v1/catalog/products`)
-```ts
-interface InitialWarehouseStockRequest {
-  warehouseId: number;     // > 0, unique in array
-  initialQty: number;      // >= 0 (in BaseUnit)
-  minReorderQty?: number;  // >= 0 (default 0)
-}
-// Added as optional field `initialWarehouseStocks?: InitialWarehouseStockRequest[]`
-// on CreateMasterProductRequest alongside `baseUnit`, `weightedAvgCost`, `minAllowedSellingPrice`,
-// `wholesaleSellingPrice`, `retailSellingPrice`, and `units[]`.
-```
+### Render.com Free Docker Service (`apps/backend-api`)
+| Variable | Example / Format | Required | Notes |
+| :--- | :--- | :---: | :--- |
+| `ASPNETCORE_ENVIRONMENT` | `Production` | Yes | Production mode (non-dev) |
+| `ConnectionStrings__SqlServer` | `Server=...;Database=...;User Id=...;Password=...;Encrypt=True;TrustServerCertificate=True;` | Yes | From MonsterASP.NET / Azure SQL Free / Somee |
+| `Auth__Jwt__Issuer` | `https://almomiaa-api.onrender.com` | Yes | Matches Render URL |
+| `Auth__Jwt__Audience` | `almomiaa-erp-clients` | Yes | Canonical JWT audience |
+| `Auth__Jwt__SigningKey` | `<random 48+ char secret>` | Yes | Auto-generated or random secret (`>= 32` UTF-8 bytes) |
+| `Cors__AllowedOriginsCsv` | `https://almomiaa-erp.vercel.app,https://almomiaa-rep.vercel.app` | Yes | Exact HTTPS origins of both Vercel apps (no trailing slash, no `*`) |
+| `Hosting__TrustForwardedHeaders` | `true` | Yes | Required behind Render HTTPS reverse proxy |
+| `Redis__AllowInMemoryFallback` | `true` | Yes (Demo) | Enables single-instance in-memory session & rate-limit stores (default `false`) |
+| `Database__AutoMigrateOnStartup` | `true` | Yes (Demo) | Runs EF Core migrations on boot to create all 45 tables (default `false`) |
+| `Demo__SeedEnabled` | `true` | Yes (Demo) | Idempotently seeds demo warehouses, products, customers & 4 demo users (default `false`) |
+| `Demo__DefaultPassword` | `<your chosen demo password >= 8 chars>` | If `Demo__SeedEnabled=true` | Password applied to `ADMIN-DEMO`, `MGR-DEMO`, `REP-DEMO`, `WHK-DEMO` |
 
-### Multi-Warehouse Stock Breakdown (`GET /api/v1/catalog/products/{id}/availability` & `CategoryProductPriceDto`)
-```ts
-interface ProductWarehouseStockBreakdownDto {
-  warehouseId: number;
-  warehouseCode: string;
-  warehouseNameAr: string;
-  warehouseNameEn: string | null;
-  warehouseType: string;
-  physicalQty: number;
-  reservedQty: number;
-  incomingQty: number;
-  availableQty: number;
-  minReorderQty: number;
-}
-```
+### Vercel Project 1 (`apps/web-erp`)
+| Variable | Example / Format | Required |
+| :--- | :--- | :---: |
+| `BACKEND_API_ORIGIN` | `https://almomiaa-api.onrender.com` | Yes |
+| `NEXT_PUBLIC_SIGNALR_HUB_URL` | `https://almomiaa-api.onrender.com/hubs/operations` | Yes |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | `<optional Google Maps JS key>` | Optional (Interactive Satellite/Hybrid map on `/gps`; works without it using embedded fallback) |
 
-### Bulk Rep-to-Customers Linking (`POST /api/v1/customers/assign-rep/bulk`)
-```ts
-interface BulkAssignCustomersRepRequest {
-  assignedRepId: string; // Active user UUID (SALES_REP)
-  customerIds: string[]; // 1..200 Customer UUIDs
-}
-```
+### Vercel Project 2 (`apps/rep-pwa`)
+| Variable | Example / Format | Required |
+| :--- | :--- | :---: |
+| `BACKEND_API_ORIGIN` | `https://almomiaa-api.onrender.com` | Yes |
+| `VITE_SIGNALR_HUB_URL` | `https://almomiaa-api.onrender.com/hubs/operations` | Yes |
 
 ---
 
 ## 5. Security & Domain Rules
 
-1. **Cost Privacy Preserved (`07-Security.md`):** `WeightedAvgCost` remains masked (`null`) for `SALES_REP`, `SALES_MGR`, and `WH_KEEPER` across catalog read endpoints; `ProductAvailabilityDto` does NOT expose `WeightedAvgCost`.
-2. **Inventory Auditability:** Every non-zero initial warehouse stock allocated during product creation appends an immutable `[inv].[StockMovements]` row (`MovementType = "OpeningBalance"`) and `[ops].[AuditLogs]` record inside the same ACID transaction.
-3. **Rep Assignment Authorization & ABAC:** Only `customers:manage` (`SUPER_ADMIN`, `SALES_MGR`, `ACCOUNTANT`) may assign/reassign reps (`PUT /customers/{id}/assign-rep`, `POST /customers/assign-rep/bulk`). Target `assignedRepId` must reference an existing, active employee. After assignment, `SALES_REP` ABAC scoping (`Customer.AssignedRepId == CurrentUser.Id`) automatically reflects the updated customer portfolio.
-4. **Strict Design System & RTL/LTR Hygiene:** Zero hardcoded hex colors in TSX/TS, zero directional Tailwind classes (`ml-`/`mr-`/`pl-`/`pr-`/`left-`/`right-`/`text-left`/`text-right`), `tabular-nums` on all prices & quantities, `font-mono dir="ltr"` on SKUs/codes, zero `any`/`@ts-ignore`.
+1. **Zero Committed Secrets:** Never hardcode database passwords, JWT signing keys, demo passwords, or Google Maps keys in any source/config/YAML file. All secrets use `sync: false` in `render.yaml` and placeholder text in `.env.example`.
+2. **Fail-Closed Defaults Preserved:** `Database:AutoMigrateOnStartup`, `Demo:SeedEnabled`, and `Redis:AllowInMemoryFallback` MUST all default to `false`. Wildcard `*` CORS origins MUST remain rejected.
+3. **SSRF-Safe Same-Origin PWA Proxy:** `apps/rep-pwa/api/[...path].ts` MUST validate that `BACKEND_API_ORIGIN` is a valid `http(s)` URL and allow forwarding ONLY to `/api/v1/*` and `/health` paths, preserving `Set-Cookie` headers while stripping hop-by-hop headers.
+4. **Canonical Security Preserved in Demo Seed:** `WHK-DEMO` (`WH_KEEPER`) MUST be seeded with strictly **1** warehouse (`WH-RYD-MAIN`), matching `PROMPT-0009` invariant.
 
 ---
 
 ## 6. Acceptance Criteria (Definition of Done)
 
-- [ ] `POST /api/v1/catalog/products` supports optional `initialWarehouseStocks[]` (allocating different opening stock quantities across selected/all warehouses in `[inv].[WarehouseStocks]` and logging immutable `"OpeningBalance"` `[inv].[StockMovements]`).
-- [ ] `GET /api/v1/catalog/categories/{categoryId}/products` and `GET /api/v1/catalog/products/{id}/availability` return both **total available stock across all warehouses** AND an exact **per-warehouse breakdown** (`Physical`, `Reserved`, `Incoming`, `Available`).
-- [ ] `apps/web-erp` `/catalog` Create Product Drawer provides: dynamic Base Unit selector (`Piece`/`Box`/`Carton`/`Pallet`), crystal-clear Arabic/English per-unit labels + hints + 15% VAT previews for `WAC`, `Min Floor`, `Wholesale`, and `Retail`, optional **Additional Packaging Units** builder, and **Select All Warehouses / Per-Warehouse Initial Qty** allocation.
-- [ ] `apps/web-erp` `/catalog` **Price & Availability Lookup** displays **"All Warehouses"** option, total stock across all warehouses, inline per-warehouse stock badges, and a full **Warehouse Stock Breakdown Drawer**.
-- [ ] `GET /api/v1/customers/sales-reps`, `PUT /api/v1/customers/{id}/assign-rep`, and `POST /api/v1/customers/assign-rep/bulk` work end-to-end with audit logging, and `apps/web-erp` `/customers` uses a live Sales Rep dropdown on Create Customer, shows Rep names in the table, supports single "Change Rep", and supports bulk **"Assign Rep to 1 or More Customers"**.
-- [ ] All backend builds (`0` warnings/errors), backend tests (`26+` including new `CatalogWarehouseAndRepCustomerTests`), `@almomiaa/api-client` tests, `pnpm -r typecheck`, `pnpm -r lint`, `apps/rep-pwa` PWA build, `apps/web-erp` Next.js 15 build, and `@QA & Security Auditor` gate return **`PASS`**, after which `@Orchestrator` archives this prompt as `docs/agent-ops/prompt-history/0010-product-multi-warehouse-pricing-and-rep-customer-linking.md`, updates `docs/agent-ops/PROJECT_LOG.md`, and marks `CURRENT_PROMPT.md` completed.
+- [ ] `apps/backend-api/Dockerfile` & `render.yaml` build cleanly and configure Render dynamic `$PORT`, non-root runtime, `ForwardedHeaders`, and `/health` probe.
+- [ ] `Program.cs`, `TrustedOriginValidator.cs`, and `DependencyInjection.cs` support `Cors:AllowedOriginsCsv` (rejecting `*`), SQL Server transient retry, opt-in `Redis:AllowInMemoryFallback`, opt-in `Database:AutoMigrateOnStartup`, and opt-in idempotent `DemoDataSeeder` (requiring env-var `Demo:DefaultPassword`).
+- [ ] `apps/web-erp` includes `vercel.json`, `.env.example`, and installable `manifest.webmanifest` + icons wired in `layout.tsx`.
+- [ ] `apps/rep-pwa` includes `vercel.json`, SSRF-safe same-origin proxy `api/[...path].ts`, `.env.example`, and complete Android/iOS installable PWA metadata.
+- [ ] `docs/deployment/FREE_CLOUD_DEMO_DEPLOYMENT_GUIDE.md` provides complete step-by-step Arabic + English deployment and phone/desktop PWA installation instructions.
+- [ ] All backend builds (`0` warnings/errors), backend tests (`29+` including new `DemoDeploymentAndSeedTests`), `pnpm -r typecheck`, `pnpm -r lint`, `apps/rep-pwa` build (generating `dist/sw.js` & `dist/manifest.webmanifest`), `apps/web-erp` Next.js 15 build, and `@QA & Security Auditor` gate return **`PASS`**, after which `@Orchestrator` archives this prompt as `docs/agent-ops/prompt-history/0011-free-cloud-demo-deployment-kit.md`, updates `docs/agent-ops/PROJECT_LOG.md`, and marks `CURRENT_PROMPT.md` completed.

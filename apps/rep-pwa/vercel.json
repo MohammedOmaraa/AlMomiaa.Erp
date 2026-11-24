@@ -1,0 +1,30 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "buildCommand": "cd ../.. && pnpm --filter @almomiaa/api-client build && pnpm --filter @almomiaa/ui build && pnpm --filter @almomiaa/rep-pwa build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/health", "destination": "/api/health" },
+    {
+      "source": "/((?!api/|assets/|icons/|manifest\\.webmanifest|sw\\.js|registerSW\\.js|workbox-.*\\.js).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    },
+    {
+      "source": "/(sw\\.js|manifest\\.webmanifest)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    }
+  ]
+}

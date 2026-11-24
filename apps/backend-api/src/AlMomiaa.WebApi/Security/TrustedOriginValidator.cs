@@ -6,6 +6,21 @@ public sealed class CorsSecurityOptions
 {
     public const string SectionName = "Cors";
     public string[] AllowedOrigins { get; init; } = [];
+    public string? AllowedOriginsCsv { get; init; }
+
+    public string[] ResolveAllowedOrigins()
+    {
+        var csvOrigins = string.IsNullOrWhiteSpace(AllowedOriginsCsv)
+            ? []
+            : AllowedOriginsCsv.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        return AllowedOrigins
+            .Concat(csvOrigins)
+            .Where(o => !string.IsNullOrWhiteSpace(o))
+            .Select(o => o.Trim().TrimEnd('/'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 }
 
 public interface ITrustedOriginValidator
@@ -16,9 +31,8 @@ public interface ITrustedOriginValidator
 public sealed class TrustedOriginValidator(IOptions<CorsSecurityOptions> options) : ITrustedOriginValidator
 {
     private readonly HashSet<string> _allowedOrigins = new(
-        options.Value.AllowedOrigins
-            .Where(o => !string.IsNullOrWhiteSpace(o) && o != "*")
-            .Select(NormalizeOrigin),
+        options.Value.ResolveAllowedOrigins()
+            .Where(o => o != "*"),
         StringComparer.OrdinalIgnoreCase);
 
     public bool IsTrustedOrigin(HttpRequest request)

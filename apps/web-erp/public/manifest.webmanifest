@@ -1,0 +1,26 @@
+{
+  "name": "المومياء | AlMomiaa ERP",
+  "short_name": "AlMomiaa ERP",
+  "description": "نظام المومياء لتخطيط موارد المؤسسات والتوزيع والمبيعات | AlMomiaa Enterprise ERP & DMS",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "ar",
+  "theme_color": "#1C1B1A",
+  "background_color": "#F8F7F4",
+  "icons": [
+    {
+      "src": "/icons/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

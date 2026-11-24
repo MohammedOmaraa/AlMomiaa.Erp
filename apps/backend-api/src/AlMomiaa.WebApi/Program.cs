@@ -14,6 +14,7 @@ using AlMomiaa.WebApi.Services;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -26,9 +27,10 @@ var issuer = jwtSection["Issuer"] ?? string.Empty;
 var audience = jwtSection["Audience"] ?? string.Empty;
 var signingKey = jwtSection["SigningKey"] ?? string.Empty;
 
-var configuredOrigins = builder.Configuration
-    .GetSection($"{CorsSecurityOptions.SectionName}:AllowedOrigins")
-    .Get<string[]>() ?? [];
+var corsOptions = builder.Configuration
+    .GetSection(CorsSecurityOptions.SectionName)
+    .Get<CorsSecurityOptions>() ?? new CorsSecurityOptions();
+var configuredOrigins = corsOptions.ResolveAllowedOrigins();
 
 if (configuredOrigins.Any(origin => string.Equals(origin?.Trim(), "*", StringComparison.Ordinal)))
 {
@@ -47,8 +49,18 @@ if (string.IsNullOrWhiteSpace(issuer)
 
 if (builder.Environment.IsProduction() && configuredOrigins.Length == 0)
 {
-    throw new InvalidOperationException("Cors:AllowedOrigins must be explicitly configured in production.");
+    throw new InvalidOperationException("Cors:AllowedOrigins or Cors:AllowedOriginsCsv must be explicitly configured in production.");
 }
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    if (builder.Configuration.GetValue<bool>("Hosting:TrustForwardedHeaders", false) || builder.Environment.IsProduction())
+    {
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+    }
+});
 
 builder.Services.Configure<CorsSecurityOptions>(builder.Configuration.GetSection(CorsSecurityOptions.SectionName));
 builder.Services.AddSingleton<ITrustedOriginValidator, TrustedOriginValidator>();
@@ -189,6 +201,30 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
+
+if (app.Configuration.GetValue<bool>("Database:AutoMigrateOnStartup", false))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AlMomiaaDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    if (db.Database.IsRelational())
+    {
+        logger.LogInformation("Applying pending EF Core database migrations on startup (Database:AutoMigrateOnStartup=true)...");
+        await db.Database.MigrateAsync();
+    }
+}
+
+if (app.Configuration.GetValue<bool>("Demo:SeedEnabled", false))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AlMomiaaDbContext>();
+    var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    var demoPassword = app.Configuration.GetValue<string>("Demo:DefaultPassword");
+    await DemoDataSeeder.SeedAsync(db, hasher, demoPassword, logger);
+}
+
 if (app.Environment.IsDevelopment()
     && !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ALMOMIAA_DEV_ADMIN_CODE")))
 {
@@ -328,19 +364,27 @@ app.UseAuthentication();
 app.UseMiddleware<SecurityStampMiddleware>();
 app.UseAuthorization();
 
-app.UseSwagger(options =>
+if (app.Configuration.GetValue<bool>("Swagger:Enabled", true))
 {
-    options.RouteTemplate = "openapi/{documentName}.json";
-});
-app.UseSwagger();
-app.UseSwaggerUI(options =>
-{
-    options.SwaggerEndpoint("/openapi/v1.json", "AlMomiaa ERP API v1");
-});
+    app.UseSwagger(options =>
+    {
+        options.RouteTemplate = "openapi/{documentName}.json";
+    });
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "AlMomiaa ERP API v1");
+    });
+}
 
 app.MapControllers();
 app.MapHub<OperationsHub>("/hubs/operations").RequireCors("TrustedFrontend");
-app.MapGet("/health", () => Results.Ok(new { status = "Healthy" })).AllowAnonymous();
+app.MapGet("/health", (IHostEnvironment env) => Results.Ok(new
+{
+    status = "Healthy",
+    environment = env.EnvironmentName,
+    timestampUtc = DateTime.UtcNow
+})).AllowAnonymous();
 
 app.Run();
 
