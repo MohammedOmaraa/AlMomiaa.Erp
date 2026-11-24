@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import type {
   AuthenticatedUser,
   AuthenticationResponse,
+  ChangePasswordRequest,
   LoginRequest,
 } from "@almomiaa/api-client";
 import {
@@ -31,6 +32,7 @@ export interface AuthContextValue {
   user: AuthenticatedUser | null;
   login: (request: LoginRequest) => Promise<AuthenticationResponse>;
   logout: () => Promise<void>;
+  changePassword: (request: ChangePasswordRequest) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -105,9 +107,20 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     }
   }, [router]);
 
+  const changePassword = useCallback(
+    async (request: ChangePasswordRequest): Promise<void> => {
+      await authService.changePassword(request);
+      accessTokenStore.clearAccessToken();
+      setUser(null);
+      setStatus("unauthenticated");
+      router.replace("/login?passwordChanged=1");
+    },
+    [router],
+  );
+
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, login, logout }),
-    [status, user, login, logout]
+    () => ({ status, user, login, logout, changePassword }),
+    [status, user, login, logout, changePassword]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

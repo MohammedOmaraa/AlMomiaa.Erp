@@ -3,6 +3,7 @@ import type { AxiosInstance } from "axios";
 export type {
   AuthenticatedUser,
   AuthenticationResponse,
+  ChangePasswordRequest,
   LoginRequest,
   ProblemDetails,
 } from "./auth/auth.types.js";
@@ -10,6 +11,7 @@ export type {
 export {
   authenticatedUserSchema,
   authenticationResponseSchema,
+  changePasswordRequestSchema,
   loginRequestSchema,
   problemDetailsSchema,
 } from "./auth/auth.schemas.js";
@@ -109,8 +111,19 @@ export type {
   ExecutiveDashboardDto,
   GpsPingItemRequest,
   HealthDto,
+  LiveRepGpsDto,
+  RepGpsHistoryPointDto,
   RoleDashboardDto,
 } from "./modules/operations.service.js";
+
+export { createNotificationsService } from "./modules/notifications.service.js";
+export type {
+  MarkAllNotificationsReadResponse,
+  MarkNotificationReadResponse,
+  NotificationsPageDto,
+  NotificationSeverity,
+  UserNotificationDto,
+} from "./modules/notifications.service.js";
 
 export {
   computeJitteredReconnectDelay,
@@ -136,6 +149,7 @@ import { createProcurementService } from "./modules/procurement.service.js";
 import { createSalesService } from "./modules/sales.service.js";
 import { createFinanceService } from "./modules/finance.service.js";
 import { createOperationsService } from "./modules/operations.service.js";
+import { createNotificationsService } from "./modules/notifications.service.js";
 
 export function createErpApi(http: AxiosInstance) {
   return {
@@ -147,6 +161,7 @@ export function createErpApi(http: AxiosInstance) {
     sales: createSalesService(http),
     finance: createFinanceService(http),
     operations: createOperationsService(http),
+    notifications: createNotificationsService(http),
   };
 }
 

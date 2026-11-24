@@ -69,3 +69,38 @@ public sealed class GpsRouteHistoryConfiguration : IEntityTypeConfiguration<GpsR
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
+
+public sealed class UserNotificationConfiguration : IEntityTypeConfiguration<UserNotification>
+{
+    public void Configure(EntityTypeBuilder<UserNotification> builder)
+    {
+        builder.ToTable("Notifications", "ops");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+
+        builder.Property(x => x.RecipientUserId).IsRequired();
+        builder.Property(x => x.EventType).HasMaxLength(80).IsRequired();
+        builder.Property(x => x.Severity).HasMaxLength(20).IsRequired();
+        builder.Property(x => x.TitleAr).HasMaxLength(250).IsRequired();
+        builder.Property(x => x.TitleEn).HasMaxLength(250).IsRequired();
+        builder.Property(x => x.MessageAr).HasMaxLength(1000).IsRequired();
+        builder.Property(x => x.MessageEn).HasMaxLength(1000).IsRequired();
+        builder.Property(x => x.EntityName).HasMaxLength(100);
+        builder.Property(x => x.EntityId).HasMaxLength(100);
+        builder.Property(x => x.IsRead).IsRequired().HasDefaultValue(false);
+        builder.Property(x => x.ReadAtUtc);
+        builder.Property(x => x.CreatedAtUtc).IsRequired().HasDefaultValueSql("SYSUTCDATETIME()");
+
+        builder.HasOne(x => x.RecipientUser)
+            .WithMany()
+            .HasForeignKey(x => x.RecipientUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(x => new { x.RecipientUserId, x.CreatedAtUtc })
+            .HasDatabaseName("IX_Notifications_Recipient_Created");
+
+        builder.HasIndex(x => new { x.RecipientUserId, x.CreatedAtUtc })
+            .HasFilter("[IsRead] = 0")
+            .HasDatabaseName("IX_Notifications_Recipient_Unread");
+    }
+}

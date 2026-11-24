@@ -106,6 +106,20 @@ public sealed class IamModuleService(
             warehouseIds.Add(req.DefaultWarehouseId.Value);
         }
 
+        var isWarehouseKeeper = roles.Any(r => r.RoleCode == CanonicalRolesAndPermissions.Roles.WarehouseKeeper);
+        int? effectiveDefaultWarehouseId = req.DefaultWarehouseId;
+        if (isWarehouseKeeper)
+        {
+            if (warehouseIds.Count != 1)
+            {
+                throw new BusinessRuleException(
+                    "Warehouse Keeper (WH_KEEPER) must be assigned to exactly one warehouse.",
+                    "wh-keeper-single-warehouse");
+            }
+
+            effectiveDefaultWarehouseId = warehouseIds[0];
+        }
+
         if (warehouseIds.Count > 0)
         {
             var foundCount = await db.Warehouses.AsNoTracking().CountAsync(w => warehouseIds.Contains(w.Id), ct);
@@ -121,7 +135,7 @@ public sealed class IamModuleService(
             req.Email,
             passwordHasher.HashPassword(req.Password),
             req.RepType,
-            req.DefaultWarehouseId,
+            effectiveDefaultWarehouseId,
             isActive: true,
             createdAtUtc: now);
 
@@ -239,6 +253,22 @@ public sealed class IamModuleService(
         var oldRoleCodes = user.Roles.Select(ur => ur.Role.RoleCode).OrderBy(x => x).ToArray();
         var newRoleCodes = roles.Select(r => r.RoleCode).OrderBy(x => x).ToArray();
 
+        if (roles.Any(r => r.RoleCode == CanonicalRolesAndPermissions.Roles.WarehouseKeeper))
+        {
+            var assignedIds = user.Warehouses.Select(w => w.WarehouseId).Distinct().ToList();
+            if (assignedIds.Count != 1)
+            {
+                throw new BusinessRuleException(
+                    "Warehouse Keeper (WH_KEEPER) must have exactly one assigned warehouse before assigning this role.",
+                    "wh-keeper-single-warehouse");
+            }
+
+            if (user.DefaultWarehouseId != assignedIds[0])
+            {
+                user.SetDefaultWarehouse(assignedIds[0]);
+            }
+        }
+
         user.ReplaceRoles(nextRoleIds);
 
         var now = _clock.GetUtcNow().UtcDateTime;
@@ -263,6 +293,20 @@ public sealed class IamModuleService(
             merged.Add(command.DefaultWarehouseId.Value);
         }
 
+        var effectiveDefaultWarehouseId = command.DefaultWarehouseId;
+        var isWarehouseKeeper = user.Roles.Any(ur => ur.Role.RoleCode == CanonicalRolesAndPermissions.Roles.WarehouseKeeper);
+        if (isWarehouseKeeper)
+        {
+            if (merged.Count != 1)
+            {
+                throw new BusinessRuleException(
+                    "Warehouse Keeper (WH_KEEPER) must be assigned to exactly one warehouse.",
+                    "wh-keeper-single-warehouse");
+            }
+
+            effectiveDefaultWarehouseId = merged[0];
+        }
+
         if (merged.Count > 0)
         {
             var foundCount = await db.Warehouses.AsNoTracking().CountAsync(w => merged.Contains(w.Id), ct);
@@ -273,7 +317,7 @@ public sealed class IamModuleService(
         }
 
         var oldState = new { user.DefaultWarehouseId, Warehouses = user.Warehouses.Select(w => w.WarehouseId).OrderBy(x => x).ToArray() };
-        user.ReplaceWarehouses(merged, command.DefaultWarehouseId);
+        user.ReplaceWarehouses(merged, effectiveDefaultWarehouseId);
 
         var now = _clock.GetUtcNow().UtcDateTime;
         AuditAndOutboxHelper.AppendAudit(db, currentUser, "UpdateUserWarehouses", "User", user.Id.ToString("D"), oldState, new { user.DefaultWarehouseId, Warehouses = merged.OrderBy(x => x).ToArray() }, now);

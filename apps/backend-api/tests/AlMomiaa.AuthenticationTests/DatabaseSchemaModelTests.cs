@@ -25,7 +25,7 @@ public sealed class DatabaseSchemaModelTests
     }
 
     [Fact]
-    public void Model_maps_all_8_canonical_schemas_and_44_tables_from_05_Database()
+    public void Model_maps_all_8_canonical_schemas_and_45_tables_from_05_Database()
     {
         using var db = CreateSqlServerModelContext();
         var mappedTables = db.Model.GetEntityTypes()
@@ -40,7 +40,7 @@ public sealed class DatabaseSchemaModelTests
             .ToArray();
 
         Assert.Equal(["cat", "cust", "fin", "id", "inv", "ops", "proc", "sales"], schemas);
-        Assert.Equal(44, mappedTables.Length);
+        Assert.Equal(45, mappedTables.Length);
 
         // Spot-check key tables across every schema
         Assert.Contains("id.Users", mappedTables);
@@ -64,6 +64,7 @@ public sealed class DatabaseSchemaModelTests
         Assert.Contains("ops.AuditLogs", mappedTables);
         Assert.Contains("ops.OutboxMessages", mappedTables);
         Assert.Contains("ops.GpsRouteHistory", mappedTables);
+        Assert.Contains("ops.Notifications", mappedTables);
     }
 
     [Fact]
@@ -132,6 +133,7 @@ public sealed class DatabaseSchemaModelTests
         Assert.Contains(designModel.FindEntityType(typeof(FinancialAccount))!.GetIndexes(), i => i.GetDatabaseName() == "UX_FinancialAccounts_OwnerRep" && i.GetFilter() is not null);
         Assert.Contains(designModel.FindEntityType(typeof(Collection))!.GetIndexes(), i => i.GetDatabaseName() == "UX_Collections_ProofHash" && i.GetFilter() is not null);
         Assert.Contains(designModel.FindEntityType(typeof(OutboxMessage))!.GetIndexes(), i => i.GetDatabaseName() == "IX_Outbox_Unprocessed" && i.GetFilter() is not null);
+        Assert.Contains(designModel.FindEntityType(typeof(UserNotification))!.GetIndexes(), i => i.GetDatabaseName() == "IX_Notifications_Recipient_Unread" && i.GetFilter() is not null);
 
         // Canonical reference seeds: 7 roles, 4 customer grades, 0 users
         Assert.Equal(7, designModel.FindEntityType(typeof(Role))!.GetSeedData().Count());

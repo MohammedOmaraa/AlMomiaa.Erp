@@ -4,6 +4,7 @@ import {
   LogLevel,
   type HubConnection,
 } from "@microsoft/signalr";
+import type { UserNotificationDto } from "../modules/notifications.service.js";
 
 export type OperationsHubState =
   | "disconnected"
@@ -66,7 +67,9 @@ export type OperationsHubEvent =
   | { type: "CreditCoApprovalRequired"; payload: CreditCoApprovalRequiredEvent }
   | { type: "OrderApproved"; payload: OrderApprovedEvent }
   | { type: "OrderRejected"; payload: OrderRejectedEvent }
-  | { type: "OrderUpdated"; payload: OrderUpdatedEvent };
+  | { type: "OrderUpdated"; payload: OrderUpdatedEvent }
+  | { type: "NotificationReceived"; payload: UserNotificationDto }
+  | { type: "NotificationsMarkedAllRead"; payload: { recipientUserId: string } };
 
 export interface OperationsHubClientOptions {
   hubUrl: string;
@@ -155,6 +158,12 @@ export function createOperationsHubClient(
     });
     built.on("OrderUpdated", (payload: OrderUpdatedEvent) => {
       options.onEvent?.({ type: "OrderUpdated", payload });
+    });
+    built.on("NotificationReceived", (payload: UserNotificationDto) => {
+      options.onEvent?.({ type: "NotificationReceived", payload });
+    });
+    built.on("NotificationsMarkedAllRead", (payload: { recipientUserId: string }) => {
+      options.onEvent?.({ type: "NotificationsMarkedAllRead", payload });
     });
 
     built.onreconnecting(() => setState("reconnecting"));

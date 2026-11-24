@@ -11,14 +11,17 @@ import {
 import {
   createOperationsHubClient,
   type AuthenticatedUser,
+  type ChangePasswordRequest,
   type LoginRequest,
   type OperationsHubEvent,
   type OperationsHubState,
+  type UserNotificationDto,
 } from "@almomiaa/api-client";
 import type { Locale, Theme } from "@almomiaa/ui";
 import {
   accessTokenStore,
   authService,
+  erpApi,
   setApiLocale,
   signalRHubUrl,
   subscribeAuthFailure,
@@ -33,6 +36,7 @@ interface BeforeInstallPromptEvent extends Event {
 
 export interface LiveToast {
   id: string;
+  notificationId?: string;
   tone: "success" | "danger" | "info" | "warning";
   title: string;
   message: string;
@@ -49,6 +53,7 @@ interface AppContextValue {
   authStatus: "loading" | "authenticated" | "unauthenticated";
   login: (req: LoginRequest) => Promise<AuthenticatedUser>;
   logout: () => Promise<void>;
+  changePassword: (req: ChangePasswordRequest) => Promise<void>;
   hasPermission: (claim: string) => boolean;
   isOnline: boolean;
   hubState: OperationsHubState;
@@ -56,6 +61,14 @@ interface AppContextValue {
   eventVersion: number;
   toasts: LiveToast[];
   dismissToast: (id: string) => void;
+  notifications: UserNotificationDto[];
+  unreadCount: number;
+  loadingNotifications: boolean;
+  refreshNotifications: () => Promise<void>;
+  markRead: (notificationId: string) => Promise<void>;
+  markAllRead: () => Promise<void>;
+  mutedPopups: boolean;
+  setMutedPopups: (muted: boolean) => void;
   canInstallPwa: boolean;
   promptInstallPwa: () => Promise<void>;
 }
@@ -74,8 +87,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const [lastEvent, setLastEvent] = useState<OperationsHubEvent | null>(null);
   const [eventVersion, setEventVersion] = useState(0);
   const [toasts, setToasts] = useState<LiveToast[]>([]);
+  const [notifications, setNotifications] = useState<UserNotificationDto[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [mutedPopups, setMutedPopupsState] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const localeRef = useRef<Locale>("ar-SA");
+  const mutedRef = useRef(false);
 
   const setLocale = useCallback((next: Locale) => {
     localeRef.current = next;
@@ -90,13 +108,55 @@ export function AppProviders({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle("dark", next === "dark");
   }, []);
 
+  const setMutedPopups = useCallback((muted: boolean) => {
+    mutedRef.current = muted;
+    setMutedPopupsState(muted);
+    if (muted) {
+      setToasts([]);
+    }
+  }, []);
+
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
   const pushToast = useCallback((toast: Omit<LiveToast, "id">) => {
+    if (mutedRef.current) return;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setToasts((prev) => [{ ...toast, id }, ...prev].slice(0, 4));
+  }, []);
+
+  const refreshNotifications = useCallback(async () => {
+    if (authStatus !== "authenticated" || !user) return;
+    setLoadingNotifications(true);
+    try {
+      const page = await erpApi.notifications.getNotifications({ page: 1, pageSize: 50 });
+      setNotifications(page.items);
+      setUnreadCount(page.unreadCount);
+    } catch {
+      // Keep existing state on transient error
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }, [authStatus, user]);
+
+  const markRead = useCallback(async (notificationId: string) => {
+    const res = await erpApi.notifications.markRead(notificationId);
+    setNotifications((prev) =>
+      prev.map((item) => (item.id === notificationId ? res.notification : item)),
+    );
+    setUnreadCount(res.unreadCount);
+    setToasts((prev) => prev.filter((t) => t.notificationId !== notificationId));
+  }, []);
+
+  const markAllRead = useCallback(async () => {
+    await erpApi.notifications.markAllRead();
+    const nowIso = new Date().toISOString();
+    setNotifications((prev) =>
+      prev.map((item) => (item.isRead ? item : { ...item, isRead: true, readAtUtc: nowIso })),
+    );
+    setUnreadCount(0);
+    setToasts([]);
   }, []);
 
   useEffect(() => {
@@ -153,9 +213,14 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (authStatus !== "authenticated" || !user) {
+      setNotifications([]);
+      setUnreadCount(0);
+      setToasts([]);
       setHubState("disconnected");
       return;
     }
+
+    void refreshNotifications();
 
     const hub = createOperationsHubClient({
       hubUrl: signalRHubUrl,
@@ -164,26 +229,30 @@ export function AppProviders({ children }: { children: ReactNode }) {
       onEvent: (event) => {
         setLastEvent(event);
         setEventVersion((v) => v + 1);
-        const dict = localeRef.current === "ar-SA" ? arMessages : enMessages;
+        const isArNow = localeRef.current === "ar-SA";
 
-        if (event.type === "OrderApproved") {
-          pushToast({
-            tone: "success",
-            title: `${dict.realtime.approvedToast} ${event.payload.orderNumber}`,
-            message: `${event.payload.totalAmount.toFixed(2)} SAR`,
+        if (event.type === "NotificationReceived") {
+          const n = event.payload;
+          setNotifications((prev) => {
+            if (prev.some((x) => x.id === n.id)) return prev;
+            return [n, ...prev].slice(0, 50);
           });
-        } else if (event.type === "OrderRejected") {
-          pushToast({
-            tone: "danger",
-            title: `${dict.realtime.rejectedToast} ${event.payload.orderNumber}`,
-            message: event.payload.rejectionReason,
-          });
-        } else if (event.type === "OrderUpdated") {
-          pushToast({
-            tone: "info",
-            title: `${dict.realtime.updatedToast} ${event.payload.orderNumber}`,
-            message: `${event.payload.changeType} — ${event.payload.totalAmount.toFixed(2)} SAR`,
-          });
+          if (!n.isRead) {
+            setUnreadCount((c) => c + 1);
+            pushToast({
+              notificationId: n.id,
+              tone: n.severity,
+              title: isArNow ? n.titleAr : n.titleEn,
+              message: isArNow ? n.messageAr : n.messageEn,
+            });
+          }
+        } else if (event.type === "NotificationsMarkedAllRead") {
+          const nowIso = new Date().toISOString();
+          setNotifications((prev) =>
+            prev.map((item) => (item.isRead ? item : { ...item, isRead: true, readAtUtc: nowIso })),
+          );
+          setUnreadCount(0);
+          setToasts([]);
         }
       },
     });
@@ -192,7 +261,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     return () => {
       void hub.stop();
     };
-  }, [authStatus, user, pushToast]);
+  }, [authStatus, user, pushToast, refreshNotifications]);
 
   const login = useCallback(async (req: LoginRequest) => {
     const res = await authService.login(req);
@@ -203,6 +272,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await authService.logout();
+    setUser(null);
+    setAuthStatus("unauthenticated");
+  }, []);
+
+  const changePassword = useCallback(async (req: ChangePasswordRequest) => {
+    await authService.changePassword(req);
+    accessTokenStore.clearAccessToken();
     setUser(null);
     setAuthStatus("unauthenticated");
   }, []);
@@ -231,6 +307,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       authStatus,
       login,
       logout,
+      changePassword,
       hasPermission,
       isOnline,
       hubState,
@@ -238,6 +315,14 @@ export function AppProviders({ children }: { children: ReactNode }) {
       eventVersion,
       toasts,
       dismissToast,
+      notifications,
+      unreadCount,
+      loadingNotifications,
+      refreshNotifications,
+      markRead,
+      markAllRead,
+      mutedPopups,
+      setMutedPopups,
       canInstallPwa: Boolean(installPrompt),
       promptInstallPwa,
     }),
@@ -250,6 +335,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       authStatus,
       login,
       logout,
+      changePassword,
       hasPermission,
       isOnline,
       hubState,
@@ -257,6 +343,14 @@ export function AppProviders({ children }: { children: ReactNode }) {
       eventVersion,
       toasts,
       dismissToast,
+      notifications,
+      unreadCount,
+      loadingNotifications,
+      refreshNotifications,
+      markRead,
+      markAllRead,
+      mutedPopups,
+      setMutedPopups,
       installPrompt,
       promptInstallPwa,
     ],

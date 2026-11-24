@@ -53,3 +53,5 @@ export { DrawerModal } from "./components/overlays/DrawerModal";
 export type { DrawerModalProps } from "./components/overlays/DrawerModal";
 export { AlertBanner } from "./components/feedback/AlertBanner";
 export type { AlertBannerProps, AlertTone } from "./components/feedback/AlertBanner";
+export { NotificationItem } from "./components/feedback/NotificationItem";
+export type { NotificationItemProps, NotificationSeverity } from "./components/feedback/NotificationItem";

@@ -8,7 +8,7 @@ import {
   Button,
   DataTable,
   DrawerModal,
-  JsonResponseViewer,
+  KeyValueList,
   SurfaceCard,
   Tabs,
   TextField,
@@ -165,19 +165,33 @@ export function ReportsWorkspace() {
         size="lg"
       >
         {selectedLog && (
-          <JsonResponseViewer
-            method="AUDIT"
-            endpoint={`/api/v1/audit-logs#${selectedLog.id}`}
-            status={200}
-            timestamp={selectedLog.timestampUtc}
-            payload={{
-              userId: selectedLog.userId,
-              userRole: selectedLog.userRole,
-              ipAddress: selectedLog.ipAddress,
-              oldValues: selectedLog.oldValuesJson ? JSON.parse(selectedLog.oldValuesJson) : null,
-              newValues: selectedLog.newValuesJson ? JSON.parse(selectedLog.newValuesJson) : null,
-            }}
-          />
+          <div className="space-y-4">
+            <KeyValueList
+              columns={2}
+              items={[
+                { id: "audit-user", label: isAr ? "المستخدم" : "User ID", value: selectedLog.userId, mono: true, dir: "ltr" },
+                { id: "audit-role", label: isAr ? "الدور" : "Role", value: selectedLog.userRole, mono: true },
+                { id: "audit-ip", label: "IP", value: selectedLog.ipAddress ?? "—", mono: true, dir: "ltr" },
+                { id: "audit-ts", label: isAr ? "التاريخ" : "Timestamp", value: formatDateTime(selectedLog.timestampUtc, locale) },
+              ]}
+            />
+            {selectedLog.oldValuesJson && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-text-secondary">{isAr ? "القيم السابقة" : "Previous Values"}</p>
+                <pre dir="ltr" className="max-h-56 overflow-auto rounded-lg border border-surface-border bg-surface-canvas p-3 font-mono text-xs text-text-primary">
+                  {selectedLog.oldValuesJson}
+                </pre>
+              </div>
+            )}
+            {selectedLog.newValuesJson && (
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-text-secondary">{isAr ? "القيم الجديدة" : "New Values"}</p>
+                <pre dir="ltr" className="max-h-56 overflow-auto rounded-lg border border-surface-border bg-surface-canvas p-3 font-mono text-xs text-text-primary">
+                  {selectedLog.newValuesJson}
+                </pre>
+              </div>
+            )}
+          </div>
         )}
       </DrawerModal>
     </ErpAppLayout>

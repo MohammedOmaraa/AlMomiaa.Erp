@@ -23,6 +23,7 @@
 | `POST` | `/auth/login` | Public (`[AllowAnonymous]`) | Authenticates by employee code or phone (`{ identifier, password }`). Returns 10-minute Bearer JWT (`expiresIn: 600`) + authenticated user context (`roleCodes`, `permissions`, `repType`, `defaultWarehouseId`, `assignedWarehouseIds`) and sets an `HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` host-only refresh cookie (14-day max). Returns generic `401` ProblemDetails on invalid credentials/inactive account, `429` when throttled, `400` on validation errors. |
 | `POST` | `/auth/refresh` | Public (`[AllowAnonymous]`, cookie-authenticated) | Empty request body. Validates trusted origin (`403` on cross-site untrusted origin), atomically rotates the `almomiaa_refresh` cookie, revokes the entire session family on replay/expiry/stamp mismatch, and returns the same `AuthenticationResponse` JSON as login. Clears cookie and returns `401` ProblemDetails on invalid session (`503` if Redis security-stamp store is unavailable). |
 | `POST` | `/auth/logout` | Public (`[AllowAnonymous]`, cookie-authenticated, idempotent) | Validates trusted origin (`403` on untrusted origin), revokes the current refresh-session family when a valid cookie is present, always clears the `almomiaa_refresh` cookie (`Max-Age=0`), and returns `204 No Content`. |
+| `POST` | `/auth/change-password` | Authenticated (`[Authorize]`) | Validates trusted origin, verifies `currentPassword`, enforces password policy (`>= 8` chars, confirmation match, distinct from current), hashes new password, rotates `SecurityStamp`, revokes all active refresh sessions, clears `almomiaa_refresh` cookie, appends `[ops].[AuditLogs]` without secrets, and returns `204 No Content`. |
 | `GET` | `/users` | `users:manage` | Paginated list of employees, roles, rep types, and assigned warehouses/vans. |
 | `GET` | `/users/{id}` | `users:manage` | Employee detail profile including assigned roles, assigned warehouses, and computed effective permissions. |
 | `POST` | `/users` | `users:manage` | Creates user and auto-initializes `RepCustodyWallet` (and optional `MobileVan` warehouse) if `SALES_REP`. |
@@ -130,6 +131,11 @@
 | `GET` | `/dashboards/role/{roleView}` | Role dashboard claim | Endpoints for `sales`, `inventory`, `finance`, `warehouse`, and `rep` dashboards. |
 | `GET` | `/audit-logs` | `audit:view` | Keyset-paginated audit trail (`User`, `Action`, `Timestamp`, `OldValuesJson`, `NewValuesJson`). |
 | `POST` | `/gps/pings` | `gps:stream` | Batched field sales rep GPS telemetry endpoint. |
+| `GET` | `/gps/live` | `GpsTrackRoles` (`SUPER_ADMIN`, `EXEC_MGR`, `SALES_MGR` ONLY) | Latest GPS coordinates and recent online status per tracked sales rep (polled every 10s by Google Maps tracker). |
+| `GET` | `/gps/reps/{repId}/history` | `GpsTrackRoles` (`SUPER_ADMIN`, `EXEC_MGR`, `SALES_MGR` ONLY) | Recent route history points for a specific sales rep. |
+| `GET` | `/notifications` | Authenticated (`[Authorize]`) | Lists current user's persistent `[ops].[Notifications]` rows with `unreadCount`. |
+| `PATCH` | `/notifications/{id}/read` | Authenticated (`[Authorize]`) | Marks a single notification owned by the current user as read. |
+| `POST` | `/notifications/mark-all-read` | Authenticated (`[Authorize]`) | Bulk-marks all unread notifications for the current user as read (`unreadCount = 0`) and broadcasts `NotificationsMarkedAllRead` to `user:{userId}`. |
 
 ---
 

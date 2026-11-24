@@ -2,6 +2,7 @@ import { z } from "zod";
 import type {
   AuthenticatedUser,
   AuthenticationResponse,
+  ChangePasswordRequest,
   LoginRequest,
   ProblemDetails,
 } from "./auth.types.js";
@@ -12,6 +13,22 @@ export const loginRequestSchema: z.ZodType<LoginRequest> = z
     password: z.string().min(1).max(256),
   })
   .strict();
+
+export const changePasswordRequestSchema: z.ZodType<ChangePasswordRequest> = z
+  .object({
+    currentPassword: z.string().min(1).max(256),
+    newPassword: z.string().min(8).max(128),
+    confirmNewPassword: z.string().min(8).max(128),
+  })
+  .strict()
+  .refine((data) => data.newPassword === data.confirmNewPassword, {
+    message: "Password confirmation must match the new password.",
+    path: ["confirmNewPassword"],
+  })
+  .refine((data) => data.newPassword !== data.currentPassword, {
+    message: "New password must be different from the current password.",
+    path: ["newPassword"],
+  });
 
 export const authenticatedUserSchema: z.ZodType<AuthenticatedUser> = z
   .object({

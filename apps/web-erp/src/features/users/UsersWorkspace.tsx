@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import type { RoleDto, UserDetailDto, UserSummaryDto } from "@almomiaa/api-client";
+import type { RoleDto, UserDetailDto, UserSummaryDto, WarehouseDto } from "@almomiaa/api-client";
 import {
   AlertBanner,
   Badge,
@@ -48,6 +48,7 @@ export function UsersWorkspace() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [roles, setRoles] = useState<RoleDto[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<{ tone: "success" | "danger"; title: string; message: string; details?: string[] } | null>(null);
 
@@ -73,6 +74,7 @@ export function UsersWorkspace() {
   const [password, setPassword] = useState("");
   const [repType, setRepType] = useState("");
   const [newUserRoleId, setNewUserRoleId] = useState("4");
+  const [newUserWarehouseId, setNewUserWarehouseId] = useState("");
   const [createVan, setCreateVan] = useState(false);
   const [plateNo, setPlateNo] = useState("");
 
@@ -102,6 +104,15 @@ export function UsersWorkspace() {
       if (canManagePerms) {
         tasks.push(erpApi.users.getRoles().then(setRoles));
       }
+      tasks.push(
+        erpApi.inventory
+          .getWarehouses()
+          .then((list) => {
+            setWarehouses(list);
+            setNewUserWarehouseId((prev) => prev || (list[0] ? String(list[0].id) : ""));
+          })
+          .catch(() => undefined),
+      );
       await Promise.all(tasks);
     } catch (err) {
       const f = formatApiError(err);
@@ -115,11 +126,27 @@ export function UsersWorkspace() {
     void loadData();
   }, [loadData]);
 
+  const selectedNewRole = roles.find((r) => String(r.id) === newUserRoleId);
+  const isCreatingWhKeeper = selectedNewRole?.roleCode === "WH_KEEPER";
+
   const handleCreateUser = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setBanner(null);
     try {
+      const singleWhId = newUserWarehouseId ? Number(newUserWarehouseId) : null;
+      if (isCreatingWhKeeper && (!singleWhId || singleWhId <= 0)) {
+        setBanner({
+          tone: "danger",
+          title: isAr ? "مطلوب مستودع واحد" : "Single Warehouse Required",
+          message: isAr
+            ? "يجب اختيار مستودع واحد بالضبط لأمين المستودع (WH_KEEPER)."
+            : "Warehouse Keeper (WH_KEEPER) must be assigned to exactly one warehouse.",
+        });
+        setSubmitting(false);
+        return;
+      }
+
       const created = await erpApi.users.createUser({
         employeeCode: empCode,
         fullNameAr,
@@ -128,8 +155,10 @@ export function UsersWorkspace() {
         email: email || null,
         password,
         repType: repType || null,
+        defaultWarehouseId: singleWhId,
+        assignedWarehouseIds: singleWhId ? [singleWhId] : [],
         roleIds: [Number(newUserRoleId)],
-        createMobileVan: createVan,
+        createMobileVan: isCreatingWhKeeper ? false : createVan,
         vehiclePlateNumber: plateNo || null,
       });
       setBanner({ tone: "success", title: isAr ? "تم إنشاء الموظف" : "Employee Created", message: `${created.employeeCode} (${created.fullNameAr})` });
@@ -186,15 +215,36 @@ export function UsersWorkspace() {
     }
   };
 
+  const isEditingWhKeeper = Boolean(editWhTarget?.roleCodes.includes("WH_KEEPER"));
+
   const handleSaveUserWarehouses = async () => {
     if (!editWhTarget) return;
     setSubmitting(true);
     try {
-      const parsedAssigned = assignedWhInput
-        .split(",")
-        .map((s) => Number(s.trim()))
-        .filter((n) => Number.isInteger(n) && n > 0);
-      const parsedDefault = defaultWhInput.trim() ? Number(defaultWhInput.trim()) : null;
+      let parsedDefault: number | null;
+      let parsedAssigned: number[];
+      if (isEditingWhKeeper) {
+        const single = Number(defaultWhInput.trim());
+        if (!Number.isInteger(single) || single <= 0) {
+          setBanner({
+            tone: "danger",
+            title: isAr ? "مطلوب مستودع واحد" : "Single Warehouse Required",
+            message: isAr
+              ? "أمين المستودع (WH_KEEPER) يجب أن يرتبط بمستودع واحد فقط."
+              : "Warehouse Keeper (WH_KEEPER) must be assigned to exactly one warehouse.",
+          });
+          setSubmitting(false);
+          return;
+        }
+        parsedDefault = single;
+        parsedAssigned = [single];
+      } else {
+        parsedAssigned = assignedWhInput
+          .split(",")
+          .map((s) => Number(s.trim()))
+          .filter((n) => Number.isInteger(n) && n > 0);
+        parsedDefault = defaultWhInput.trim() ? Number(defaultWhInput.trim()) : null;
+      }
       await erpApi.users.updateUserWarehouses(editWhTarget.id, parsedDefault, parsedAssigned);
       setBanner({ tone: "success", title: isAr ? "تم تحديث المستودعات" : "Warehouses Updated", message: editWhTarget.employeeCode });
       setEditWhTarget(null);
@@ -398,6 +448,34 @@ export function UsersWorkspace() {
             onChange={(e) => setNewUserRoleId(e.target.value)}
             options={roles.length > 0 ? roles.map((r) => ({ value: String(r.id), label: `${r.roleCode} — ${isAr ? r.nameAr : r.nameEn}` })) : [{ value: "4", label: "SALES_REP" }]}
           />
+          {isCreatingWhKeeper && (
+            <AlertBanner
+              tone="warning"
+              message={
+                isAr
+                  ? "أمين المستودع (WH_KEEPER) يجب أن يرتبط بمستودع واحد فقط."
+                  : "Warehouse Keeper (WH_KEEPER) must be assigned to exactly one warehouse."
+              }
+            />
+          )}
+          <SelectField
+            label={
+              isCreatingWhKeeper
+                ? isAr
+                  ? "المستودع الوحيد المخصص (إلزامي لـ WH_KEEPER)"
+                  : "Single Assigned Warehouse (Required for WH_KEEPER)"
+                : isAr
+                  ? "المستودع الافتراضي (اختياري)"
+                  : "Default Warehouse (Optional)"
+            }
+            value={newUserWarehouseId}
+            onChange={(e) => setNewUserWarehouseId(e.target.value)}
+            placeholderOption={isCreatingWhKeeper ? undefined : isAr ? "غير محدد" : "None"}
+            options={warehouses.map((w) => ({
+              value: String(w.id),
+              label: `#${w.id} — ${w.warehouseCode} (${isAr ? w.nameAr : (w.nameEn ?? w.nameAr)})`,
+            }))}
+          />
           <SelectField
             label={isAr ? "نوع المندوب (اختياري)" : "Rep Type (Optional)"}
             value={repType}
@@ -494,8 +572,47 @@ export function UsersWorkspace() {
         }
       >
         <div className="space-y-3">
-          <TextField label={isAr ? "المستودع الافتراضي (ID)" : "Default Warehouse ID"} value={defaultWhInput} onChange={(e) => setDefaultWhInput(e.target.value)} placeholder="1" />
-          <TextField label={isAr ? "المستودعات المسندة (أرقام مفصولة بفاصلة)" : "Assigned Warehouse IDs (comma-separated)"} value={assignedWhInput} onChange={(e) => setAssignedWhInput(e.target.value)} placeholder="1, 2" />
+          {isEditingWhKeeper ? (
+            <>
+              <AlertBanner
+                tone="warning"
+                message={
+                  isAr
+                    ? "سياسة النظام: أمين المستودع (WH_KEEPER) يرتبط بمستودع واحد فقط ولا يمكن إسناد أكثر من مستودع له."
+                    : "Policy: Warehouse Keeper (WH_KEEPER) must be assigned to strictly one warehouse."
+                }
+              />
+              {warehouses.length > 0 ? (
+                <SelectField
+                  label={isAr ? "المستودع الوحيد المخصص" : "Single Assigned Warehouse"}
+                  value={defaultWhInput}
+                  onChange={(e) => {
+                    setDefaultWhInput(e.target.value);
+                    setAssignedWhInput(e.target.value);
+                  }}
+                  options={warehouses.map((w) => ({
+                    value: String(w.id),
+                    label: `#${w.id} — ${w.warehouseCode} (${isAr ? w.nameAr : (w.nameEn ?? w.nameAr)})`,
+                  }))}
+                />
+              ) : (
+                <TextField
+                  label={isAr ? "معرف المستودع الوحيد (ID)" : "Single Warehouse ID"}
+                  value={defaultWhInput}
+                  onChange={(e) => {
+                    setDefaultWhInput(e.target.value);
+                    setAssignedWhInput(e.target.value);
+                  }}
+                  placeholder="1"
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <TextField label={isAr ? "المستودع الافتراضي (ID)" : "Default Warehouse ID"} value={defaultWhInput} onChange={(e) => setDefaultWhInput(e.target.value)} placeholder="1" />
+              <TextField label={isAr ? "المستودعات المسندة (أرقام مفصولة بفاصلة)" : "Assigned Warehouse IDs (comma-separated)"} value={assignedWhInput} onChange={(e) => setAssignedWhInput(e.target.value)} placeholder="1, 2" />
+            </>
+          )}
         </div>
       </DrawerModal>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AlertBanner,
@@ -8,19 +8,24 @@ import {
   Button,
   DrawerModal,
   EmptyState,
-  JsonResponseViewer,
+  NotificationItem,
+  PasswordField,
   ResponsiveAppShell,
+  Tabs,
   type SidebarNavItemProps,
   type Theme,
 } from "@almomiaa/ui";
 import { useTheme } from "next-themes";
+import { formatApiError } from "../lib/api-client";
+import { formatDateTime } from "../lib/formatters";
 import { hasAnyPermission } from "../lib/permissions";
 import { ar } from "../locales/ar";
 import { en } from "../locales/en";
-import { useApiActivity } from "../providers/ApiActivityProvider";
 import { useAuth } from "../providers/AuthProvider";
 import { useLocale } from "../providers/LocaleProvider";
 import { useRealtime } from "../providers/RealtimeProvider";
+
+const GPS_ALLOWED_ROLES = ["SUPER_ADMIN", "EXEC_MGR", "SALES_MGR"] as const;
 
 function NavIcon({ paths }: { paths: string[] }) {
   return (
@@ -50,6 +55,7 @@ const navIcons: Record<string, ReactNode> = {
   purchasing: <NavIcon paths={["M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z", "M3 6h18", "M16 10a4 4 0 0 1-8 0"]} />,
   sales: <NavIcon paths={["M3 17l6-6 4 4 8-8", "M17 7h4v4"]} />,
   finance: <NavIcon paths={["M2 7h20v12H2z", "M16 13h2", "M2 10h20"]} />,
+  gps: <NavIcon paths={["M12 21s-6-5.33-6-10a6 6 0 1 1 12 0c0 4.67-6 10-6 10z", "M12 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"]} />,
   reports: <NavIcon paths={["M18 20V10", "M12 20V4", "M6 20v-6"]} />,
 };
 
@@ -57,6 +63,7 @@ export interface ErpAppLayoutProps {
   title: string;
   subtitle?: string;
   requiredPermissions?: string[];
+  allowedRoles?: readonly string[];
   headerActions?: ReactNode;
   children: ReactNode;
 }
@@ -65,6 +72,7 @@ export function ErpAppLayout({
   title,
   subtitle,
   requiredPermissions = [],
+  allowedRoles,
   headerActions,
   children,
 }: ErpAppLayoutProps) {
@@ -72,11 +80,33 @@ export function ErpAppLayout({
   const pathname = usePathname();
   const { locale, setLocale } = useLocale();
   const { resolvedTheme, setTheme } = useTheme();
-  const { status, user, logout } = useAuth();
-  const { logs, inspectorOpen, setInspectorOpen, clearLogs } = useApiActivity();
-  const { hubState, toasts, dismissToast } = useRealtime();
+  const { status, user, logout, changePassword } = useAuth();
+  const {
+    hubState,
+    toasts,
+    dismissToast,
+    notifications,
+    unreadCount,
+    loadingNotifications,
+    refreshNotifications,
+    markRead,
+    markAllRead,
+    mutedPopups,
+    setMutedPopups,
+  } = useRealtime();
+
   const [mounted, setMounted] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifTab, setNotifTab] = useState("unread");
+  const [markingAll, setMarkingAll] = useState(false);
+
+  const [pwdOpen, setPwdOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [pwdError, setPwdError] = useState<string | null>(null);
+  const [pwdSubmitting, setPwdSubmitting] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -88,7 +118,8 @@ export function ErpAppLayout({
     }
   }, [status, router]);
 
-  const t = locale === "ar-SA" ? ar : en;
+  const isAr = locale === "ar-SA";
+  const t = isAr ? ar : en;
   const theme: Theme = mounted && resolvedTheme === "dark" ? "dark" : "light";
 
   if (status !== "authenticated" || !user) {
@@ -105,13 +136,17 @@ export function ErpAppLayout({
     );
   }
 
-  const displayName = locale === "ar-SA" ? user.fullNameAr : (user.fullNameEn ?? user.fullNameAr);
+  const displayName = isAr ? user.fullNameAr : (user.fullNameEn ?? user.fullNameAr);
+  const canTrackGps = user.roleCodes.some((role) =>
+    (GPS_ALLOWED_ROLES as readonly string[]).includes(role),
+  );
 
   const navDefinitions: Array<{
     id: string;
     label: string;
     href: string;
     permissions: string[];
+    roles?: readonly string[];
     icon: ReactNode;
   }> = [
     { id: "dashboard", label: t.dashboard, href: "/", permissions: [], icon: navIcons.dashboard },
@@ -122,11 +157,17 @@ export function ErpAppLayout({
     { id: "purchasing", label: t.purchasing, href: "/purchasing", permissions: ["procurement:manage", "procurement:receive"], icon: navIcons.purchasing },
     { id: "sales", label: t.sales, href: "/sales", permissions: ["orders:create", "orders:approve", "warehouse:ship", "invoices:view", "sales:returns", "delivery:dispatch", "delivery:update_pod"], icon: navIcons.sales },
     { id: "finance", label: t.finance, href: "/finance", permissions: ["dashboards:finance", "collections:create", "finance:confirm_treasury", "finance:verify_bank", "finance:close_period"], icon: navIcons.finance },
+    { id: "gps", label: t.gps, href: "/gps", permissions: [], roles: GPS_ALLOWED_ROLES, icon: navIcons.gps },
     { id: "reports", label: t.reports, href: "/reports", permissions: ["audit:view", "gps:stream"], icon: navIcons.reports },
   ];
 
   const items: Array<SidebarNavItemProps & { id: string }> = navDefinitions
-    .filter((item) => hasAnyPermission(user, item.permissions))
+    .filter((item) => {
+      if (item.roles && !item.roles.some((r) => user.roleCodes.includes(r))) {
+        return false;
+      }
+      return hasAnyPermission(user, item.permissions);
+    })
     .map((item) => ({
       id: item.id,
       label: item.label,
@@ -135,7 +176,12 @@ export function ErpAppLayout({
       icon: item.icon,
     }));
 
-  const canAccessPage = hasAnyPermission(user, requiredPermissions);
+  const hasRoleAccess =
+    !allowedRoles || allowedRoles.length === 0 || allowedRoles.some((r) => user.roleCodes.includes(r));
+  const canAccessPage = hasRoleAccess && hasAnyPermission(user, requiredPermissions);
+
+  const visibleNotifications =
+    notifTab === "unread" ? notifications.filter((n) => !n.isRead) : notifications;
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -143,6 +189,48 @@ export function ErpAppLayout({
       await logout();
     } finally {
       setLoggingOut(false);
+    }
+  };
+
+  const handleChangePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setPwdError(null);
+
+    if (newPassword.length < 8) {
+      setPwdError(
+        isAr ? "يجب أن تكون كلمة المرور الجديدة 8 أحرف على الأقل." : "New password must be at least 8 characters.",
+      );
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPwdError(
+        isAr ? "تأكيد كلمة المرور غير مطابق." : "Password confirmation does not match.",
+      );
+      return;
+    }
+
+    setPwdSubmitting(true);
+    try {
+      await changePassword({
+        currentPassword,
+        newPassword,
+        confirmNewPassword,
+      });
+      setPwdOpen(false);
+    } catch (err) {
+      const formatted = formatApiError(err);
+      setPwdError(formatted.details.length > 0 ? formatted.details.join(" | ") : formatted.message);
+    } finally {
+      setPwdSubmitting(false);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    setMarkingAll(true);
+    try {
+      await markAllRead();
+    } finally {
+      setMarkingAll(false);
     }
   };
 
@@ -158,16 +246,28 @@ export function ErpAppLayout({
       <Button
         variant="secondary"
         size="compact"
+        onClick={() => {
+          setPwdError(null);
+          setCurrentPassword("");
+          setNewPassword("");
+          setConfirmNewPassword("");
+          setPwdOpen(true);
+        }}
+        className="w-full"
+      >
+        {t.auth.changePassword}
+      </Button>
+      <Button
+        variant="ghost"
+        size="compact"
         loading={loggingOut}
         onClick={handleLogout}
-        className="w-full"
+        className="w-full text-text-inverse hover:bg-surface-charcoal"
       >
         {loggingOut ? t.auth.loggingOut : t.auth.logout}
       </Button>
     </div>
   );
-
-  const lastLog = logs[0];
 
   return (
     <>
@@ -200,41 +300,43 @@ export function ErpAppLayout({
                 size="sm"
               >
                 {hubState === "connected"
-                  ? locale === "ar-SA"
-                    ? "إشعارات مباشرة"
-                    : "Live SignalR"
+                  ? isAr
+                    ? "متصل مباشر"
+                    : "Live"
                   : hubState === "reconnecting" || hubState === "connecting"
-                    ? locale === "ar-SA"
+                    ? isAr
                       ? "جاري الاتصال"
                       : "Connecting"
-                    : locale === "ar-SA"
+                    : isAr
                       ? "غير متصل"
                       : "Offline"}
               </Badge>
-              {headerActions}
+
+              {canTrackGps && pathname !== "/gps" ? (
+                <Button variant="ghost" size="compact" onClick={() => router.push("/gps")}>
+                  {t.gps}
+                </Button>
+              ) : null}
+
               <Button
                 variant="secondary"
                 size="compact"
-                onClick={() => setInspectorOpen(true)}
+                onClick={() => {
+                  setNotifOpen(true);
+                  void refreshNotifications();
+                }}
               >
-                <span>{t.common.apiInspector}</span>
-                <Badge
-                  tone={
-                    lastLog?.status && lastLog.status >= 400
-                      ? "danger"
-                      : logs.length > 0
-                        ? "success"
-                        : "neutral"
-                  }
-                  mono
-                >
-                  {logs.length}
+                <span>{t.notifications.buttonLabel}</span>
+                <Badge tone={unreadCount > 0 ? "danger" : "neutral"} mono>
+                  {unreadCount}
                 </Badge>
               </Button>
+
+              {headerActions}
             </div>
           </div>
 
-          {toasts.length > 0 && (
+          {!mutedPopups && toasts.length > 0 && (
             <div className="space-y-2" aria-live="polite">
               {toasts.map((toast) => (
                 <AlertBanner
@@ -242,7 +344,12 @@ export function ErpAppLayout({
                   tone={toast.tone}
                   title={toast.title}
                   message={toast.message}
-                  onDismiss={() => dismissToast(toast.id)}
+                  onDismiss={() => {
+                    dismissToast(toast.id);
+                    if (toast.notificationId) {
+                      void markRead(toast.notificationId);
+                    }
+                  }}
                 />
               ))}
             </div>
@@ -261,45 +368,123 @@ export function ErpAppLayout({
       </ResponsiveAppShell>
 
       <DrawerModal
-        open={inspectorOpen}
-        onClose={() => setInspectorOpen(false)}
-        title={t.common.apiInspectorTitle}
-        subtitle={t.common.apiInspectorSubtitle}
-        size="xl"
+        open={notifOpen}
+        onClose={() => setNotifOpen(false)}
+        title={t.notifications.title}
+        subtitle={t.notifications.subtitle}
+        size="lg"
         closeLabel={t.common.close}
         footer={
           <>
-            <Button variant="secondary" size="compact" onClick={clearLogs} disabled={logs.length === 0}>
-              {t.common.clearLogs}
+            <Button
+              variant="secondary"
+              size="compact"
+              onClick={() => setMutedPopups(!mutedPopups)}
+            >
+              {mutedPopups ? t.notifications.unmutePopups : t.notifications.mutePopups}
             </Button>
-            <Button size="compact" onClick={() => setInspectorOpen(false)}>
-              {t.common.close}
+            <Button
+              size="compact"
+              loading={markingAll}
+              disabled={unreadCount === 0}
+              onClick={() => void handleMarkAllRead()}
+            >
+              {t.notifications.markAllRead}
             </Button>
           </>
         }
       >
-        {logs.length === 0 ? (
-          <EmptyState title={t.common.noApiLogs} description={t.common.noApiLogsDesc} />
-        ) : (
-          <div className="space-y-3">
-            {logs.map((entry) => (
-              <JsonResponseViewer
-                key={entry.id}
-                method={entry.method}
-                endpoint={entry.url}
-                status={entry.status}
-                durationMs={entry.durationMs}
-                timestamp={entry.timestamp}
-                requestPayload={entry.requestBody}
-                payload={entry.responseBody ?? { error: entry.errorMessage }}
-                copyLabel={t.common.copyJson}
-                copiedLabel={t.common.copied}
-                requestLabel={t.common.requestBody}
-                responseLabel={t.common.responseBody}
-              />
-            ))}
-          </div>
-        )}
+        <div className="space-y-4">
+          {mutedPopups ? (
+            <AlertBanner tone="info" message={t.notifications.mutedHint} />
+          ) : null}
+
+          <Tabs
+            activeId={notifTab}
+            onChange={setNotifTab}
+            items={[
+              { id: "unread", label: t.notifications.tabUnread, badge: unreadCount },
+              { id: "all", label: t.notifications.tabAll, badge: notifications.length },
+            ]}
+          />
+
+          {loadingNotifications && visibleNotifications.length === 0 ? (
+            <p className="py-6 text-center text-sm text-text-secondary">{t.common.loading}</p>
+          ) : visibleNotifications.length === 0 ? (
+            <EmptyState title={t.notifications.emptyTitle} description={t.notifications.emptyDesc} />
+          ) : (
+            <div className="space-y-2.5">
+              {visibleNotifications.map((item) => (
+                <NotificationItem
+                  key={item.id}
+                  title={isAr ? item.titleAr : item.titleEn}
+                  message={isAr ? item.messageAr : item.messageEn}
+                  severity={item.severity}
+                  timestamp={formatDateTime(item.createdAtUtc, locale)}
+                  isRead={item.isRead}
+                  markReadLabel={t.notifications.markRead}
+                  unreadLabel={t.notifications.unreadBadge}
+                  onMarkRead={() => void markRead(item.id)}
+                  onClick={() => {
+                    if (!item.isRead) {
+                      void markRead(item.id);
+                    }
+                    if (item.entityName === "SalesOrder") {
+                      setNotifOpen(false);
+                      router.push("/sales");
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </DrawerModal>
+
+      <DrawerModal
+        open={pwdOpen}
+        onClose={() => setPwdOpen(false)}
+        title={t.auth.changePasswordTitle}
+        subtitle={t.auth.changePasswordSubtitle}
+        closeLabel={t.common.close}
+        footer={
+          <>
+            <Button variant="secondary" size="compact" onClick={() => setPwdOpen(false)}>
+              {t.common.cancel}
+            </Button>
+            <Button type="submit" form="erp-change-password-form" size="compact" loading={pwdSubmitting}>
+              {t.auth.changePasswordSubmit}
+            </Button>
+          </>
+        }
+      >
+        <form id="erp-change-password-form" onSubmit={handleChangePassword} className="space-y-4">
+          {pwdError ? <AlertBanner tone="danger" message={pwdError} /> : null}
+          <PasswordField
+            id="erp-current-password"
+            label={t.auth.currentPassword}
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.currentTarget.value)}
+            autoComplete="current-password"
+            required
+          />
+          <PasswordField
+            id="erp-new-password"
+            label={t.auth.newPassword}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.currentTarget.value)}
+            autoComplete="new-password"
+            required
+          />
+          <PasswordField
+            id="erp-confirm-password"
+            label={t.auth.confirmNewPassword}
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.currentTarget.value)}
+            autoComplete="new-password"
+            required
+          />
+        </form>
       </DrawerModal>
     </>
   );

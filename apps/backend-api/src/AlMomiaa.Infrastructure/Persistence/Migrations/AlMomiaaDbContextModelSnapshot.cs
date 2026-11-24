@@ -3099,6 +3099,74 @@ namespace AlMomiaa.Infrastructure.Persistence.Migrations
                     b.ToTable("OutboxMessages", "ops");
                 });
 
+            modelBuilder.Entity("AlMomiaa.Domain.SystemOps.UserNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<string>("EntityId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("EntityName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<bool>("IsRead")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("MessageAr")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("MessageEn")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("ReadAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("RecipientUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("TitleAr")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("TitleEn")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecipientUserId", "CreatedAtUtc")
+                        .HasDatabaseName("IX_Notifications_Recipient_Unread")
+                        .HasFilter("[IsRead] = 0");
+
+                    b.ToTable("Notifications", "ops");
+                });
+
             modelBuilder.Entity("AlMomiaa.Domain.Catalog.Category", b =>
                 {
                     b.HasOne("AlMomiaa.Domain.Catalog.Category", "ParentCategory")
@@ -3841,6 +3909,17 @@ namespace AlMomiaa.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Rep");
+                });
+
+            modelBuilder.Entity("AlMomiaa.Domain.SystemOps.UserNotification", b =>
+                {
+                    b.HasOne("AlMomiaa.Domain.Identity.User", "RecipientUser")
+                        .WithMany()
+                        .HasForeignKey("RecipientUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RecipientUser");
                 });
 
             modelBuilder.Entity("AlMomiaa.Domain.Catalog.Category", b =>

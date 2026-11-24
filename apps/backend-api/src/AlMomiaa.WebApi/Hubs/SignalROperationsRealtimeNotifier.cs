@@ -1,4 +1,5 @@
 using AlMomiaa.Application.Common.Abstractions;
+using AlMomiaa.Application.Notifications;
 using AlMomiaa.Domain.Identity;
 using Microsoft.AspNetCore.SignalR;
 
@@ -92,6 +93,34 @@ public sealed class SignalROperationsRealtimeNotifier(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to dispatch SignalR OrderUpdated event for {OrderNumber}", notification.OrderNumber);
+        }
+    }
+
+    public async Task NotifyUserNotificationAsync(Guid recipientUserId, UserNotificationDto notification, CancellationToken ct = default)
+    {
+        try
+        {
+            await hubContext.Clients
+                .Group(OperationsHub.UserGroup(recipientUserId))
+                .SendAsync("NotificationReceived", notification, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to dispatch SignalR NotificationReceived event for user {UserId}", recipientUserId);
+        }
+    }
+
+    public async Task NotifyAllNotificationsReadAsync(Guid recipientUserId, CancellationToken ct = default)
+    {
+        try
+        {
+            await hubContext.Clients
+                .Group(OperationsHub.UserGroup(recipientUserId))
+                .SendAsync("NotificationsMarkedAllRead", new { recipientUserId }, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to dispatch SignalR NotificationsMarkedAllRead event for user {UserId}", recipientUserId);
         }
     }
 }

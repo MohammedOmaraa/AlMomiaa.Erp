@@ -2,10 +2,14 @@
 using System.Security.Cryptography;
 using System.Text;
 using AlMomiaa.Application.Authentication.Abstractions;
+using AlMomiaa.Application.Authentication.Commands.ChangePassword;
 using AlMomiaa.Application.Authentication.Commands.Login;
 using AlMomiaa.Application.Authentication.Commands.RefreshSession;
 using AlMomiaa.Application.Authentication.Contracts;
+using AlMomiaa.Application.Common.Abstractions;
+using AlMomiaa.Domain.Common;
 using AlMomiaa.Domain.Identity;
+using AlMomiaa.Domain.SystemOps;
 using AlMomiaa.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -260,6 +264,54 @@ public sealed class AuthenticationService(
         var now = _clock.GetUtcNow().UtcDateTime;
         await RevokeFamilyAsync(session.FamilyId, now, "logout", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ChangePasswordAsync(
+        Guid userId,
+        ChangePasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var user = await dbContext.Users
+            .Include(x => x.Roles).ThenInclude(x => x.Role)
+            .FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
+            ?? throw new NotFoundException("User", userId);
+
+        if (!user.IsActive)
+        {
+            throw new ForbiddenDomainException("Inactive accounts cannot change password.");
+        }
+
+        if (!passwordHasher.Verify(user.PasswordHash, request.CurrentPassword))
+        {
+            throw new BusinessRuleException("Current password is incorrect.", "invalid-current-password");
+        }
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        user.ChangePasswordHash(passwordHasher.HashPassword(request.NewPassword));
+
+        var activeSessions = await dbContext.RefreshTokenSessions
+            .Where(s => s.UserId == user.Id && s.RevokedAtUtc == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var activeSession in activeSessions)
+        {
+            activeSession.Revoke(now, "password_changed");
+        }
+
+        var roleSummary = string.Join(',', user.Roles.Select(r => r.Role.RoleCode).DefaultIfEmpty("USER"));
+        dbContext.AuditLogs.Add(AuditLog.Append(
+            user.Id,
+            roleSummary.Length > 50 ? roleSummary[..50] : roleSummary,
+            "ChangePassword",
+            "User",
+            user.Id.ToString("D"),
+            null,
+            "{\"passwordChanged\":true,\"revokedAllSessions\":true}",
+            null,
+            now));
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await securityStampStore.SetAsync(user.Id, user.SecurityStamp, cancellationToken);
     }
 
     private async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction?> BeginSerializableIfNeededAsync(

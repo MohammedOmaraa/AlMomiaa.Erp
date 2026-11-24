@@ -2,11 +2,13 @@ import { AxiosError, type AxiosInstance } from "axios";
 import type { AccessTokenStore } from "./access-token-store.js";
 import {
   authenticationResponseSchema,
+  changePasswordRequestSchema,
   loginRequestSchema,
   problemDetailsSchema,
 } from "./auth.schemas.js";
 import type {
   AuthenticationResponse,
+  ChangePasswordRequest,
   LoginRequest,
   ProblemDetails,
 } from "./auth.types.js";
@@ -15,6 +17,7 @@ export interface AuthService {
   login: (request: LoginRequest, signal?: AbortSignal) => Promise<AuthenticationResponse>;
   refresh: (signal?: AbortSignal) => Promise<AuthenticationResponse>;
   logout: (signal?: AbortSignal) => Promise<void>;
+  changePassword: (request: ChangePasswordRequest, signal?: AbortSignal) => Promise<void>;
 }
 
 export function extractProblemDetails(error: unknown): ProblemDetails | null {
@@ -67,6 +70,15 @@ export function createAuthService(
       } finally {
         tokenStore.clearAccessToken();
       }
+    },
+
+    async changePassword(request: ChangePasswordRequest, signal?: AbortSignal): Promise<void> {
+      const validated = changePasswordRequestSchema.parse(request);
+      await http.post("/auth/change-password", validated, {
+        withCredentials: true,
+        signal,
+      });
+      tokenStore.clearAccessToken();
     },
   };
 }

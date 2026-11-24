@@ -172,6 +172,19 @@ builder.Services.AddAuthorization(options =>
         || ctx.User.HasClaim("permission", CanonicalRolesAndPermissions.Permissions.OrdersCreate)
         || ctx.User.HasClaim("permission", CanonicalRolesAndPermissions.Permissions.OrdersApprove)
         || ctx.User.HasClaim("permission", CanonicalRolesAndPermissions.Permissions.DashboardsInventory)));
+
+    options.AddPolicy("GpsTrackRoles", policy => policy.RequireAssertion(ctx =>
+    {
+        var roles = ctx.User.FindAll(System.Security.Claims.ClaimTypes.Role)
+            .Select(c => c.Value)
+            .Concat((ctx.User.FindFirst("RoleCodes")?.Value ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        return roles.Any(r =>
+            string.Equals(r, CanonicalRolesAndPermissions.Roles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(r, CanonicalRolesAndPermissions.Roles.ExecutiveManager, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(r, CanonicalRolesAndPermissions.Roles.SalesManager, StringComparison.OrdinalIgnoreCase));
+    }));
 });
 
 var app = builder.Build();

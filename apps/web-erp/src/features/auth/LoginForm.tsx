@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { extractProblemDetails } from "@almomiaa/api-client";
-import { BrandLogo, Button, PasswordField, SurfaceCard, TextField } from "@almomiaa/ui";
+import { AlertBanner, BrandLogo, Button, PasswordField, SurfaceCard, TextField } from "@almomiaa/ui";
 import { ar } from "../../locales/ar";
 import { en } from "../../locales/en";
 import { useAuth } from "../../providers/AuthProvider";
@@ -20,7 +20,17 @@ export function LoginForm() {
   const [identifierError, setIdentifierError] = useState<string | undefined>();
   const [passwordError, setPasswordError] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | undefined>();
+  const [passwordChangedNotice, setPasswordChangedNotice] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("passwordChanged") === "1") {
+        setPasswordChangedNotice(true);
+      }
+    }
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -64,6 +74,16 @@ export function LoginForm() {
           <p className="mt-1 text-sm text-text-secondary">{t.auth.subtitle}</p>
         </div>
       </div>
+
+      {passwordChangedNotice && (
+        <div className="mb-4">
+          <AlertBanner
+            tone="success"
+            message={t.auth.passwordChangedBanner}
+            onDismiss={() => setPasswordChangedNotice(false)}
+          />
+        </div>
+      )}
 
       {formError && (
         <div

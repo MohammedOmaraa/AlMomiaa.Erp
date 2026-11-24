@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  changePasswordRequestSchema,
   computeJitteredReconnectDelay,
   createAccessTokenStore,
   createApiClient,
@@ -78,4 +79,31 @@ test("computeJitteredReconnectDelay applies bounded jitter and createOperationsH
     getAccessToken: () => "memory-token",
   });
   assert.equal(client.getState(), "disconnected");
+});
+
+test("changePasswordRequestSchema enforces minimum length, difference, and confirmation match", () => {
+  assert.equal(
+    changePasswordRequestSchema.safeParse({
+      currentPassword: "OldPass#1",
+      newPassword: "NewStrong#99",
+      confirmNewPassword: "NewStrong#99",
+    }).success,
+    true,
+  );
+  assert.equal(
+    changePasswordRequestSchema.safeParse({
+      currentPassword: "SamePassword#1",
+      newPassword: "SamePassword#1",
+      confirmNewPassword: "SamePassword#1",
+    }).success,
+    false,
+  );
+  assert.equal(
+    changePasswordRequestSchema.safeParse({
+      currentPassword: "OldPass#1",
+      newPassword: "NewStrong#99",
+      confirmNewPassword: "Mismatch#99",
+    }).success,
+    false,
+  );
 });

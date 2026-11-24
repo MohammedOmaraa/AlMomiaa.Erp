@@ -44,6 +44,29 @@ export interface GpsPingItemRequest {
   recordedAtUtc: string;
 }
 
+export interface LiveRepGpsDto {
+  repId: string;
+  employeeCode: string;
+  fullNameAr: string;
+  fullNameEn: string | null;
+  phone: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | null;
+  nearCustomerId: string | null;
+  recordedAtUtc: string;
+  isOnlineRecent: boolean;
+}
+
+export interface RepGpsHistoryPointDto {
+  id: number;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | null;
+  nearCustomerId: string | null;
+  recordedAtUtc: string;
+}
+
 export function createOperationsService(http: AxiosInstance) {
   return {
     getHealth: async () => {
@@ -59,5 +82,9 @@ export function createOperationsService(http: AxiosInstance) {
       (await http.get<PagedResult<AuditLogDto>>("/audit-logs", { params })).data,
     recordGpsPings: async (pings: GpsPingItemRequest[]) =>
       (await http.post<{ acceptedCount: number }>("/gps/pings", { pings })).data,
+    getLiveGps: async () =>
+      (await http.get<LiveRepGpsDto[]>("/gps/live")).data,
+    getRepGpsHistory: async (repId: string, params?: { hours?: number; limit?: number }) =>
+      (await http.get<RepGpsHistoryPointDto[]>(`/gps/reps/${repId}/history`, { params })).data,
   };
 }

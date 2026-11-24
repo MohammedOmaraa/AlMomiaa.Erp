@@ -61,6 +61,13 @@ public sealed class User
         SecurityStamp = Guid.CreateVersion7();
     }
 
+    public void ChangePasswordHash(string newPasswordHash)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newPasswordHash);
+        PasswordHash = newPasswordHash;
+        RotateSecurityStamp();
+    }
+
     public void Deactivate()
     {
         IsActive = false;

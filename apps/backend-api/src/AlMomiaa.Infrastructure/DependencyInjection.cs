@@ -65,6 +65,7 @@ public static class DependencyInjection
         services.AddScoped<ISalesModuleService, SalesModuleService>();
         services.AddScoped<IFinanceModuleService, FinanceModuleService>();
         services.AddScoped<IOperationsModuleService, OperationsModuleService>();
+        services.AddScoped<INotificationsModuleService, NotificationsModuleService>();
 
         services.AddScoped<IIdempotencyStore, PassthroughIdempotencyStore>();
         services.AddScoped<IRequestPermissionChecker, DefaultPermissionChecker>();

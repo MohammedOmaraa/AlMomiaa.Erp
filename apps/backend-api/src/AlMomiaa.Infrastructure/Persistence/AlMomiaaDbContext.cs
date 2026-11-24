@@ -67,10 +67,11 @@ public sealed class AlMomiaaDbContext(DbContextOptions<AlMomiaaDbContext> option
     public DbSet<JournalLine> JournalLines => Set<JournalLine>();
     public DbSet<DailyFinancialSnapshot> DailyFinancialSnapshots => Set<DailyFinancialSnapshot>();
 
-    // [sys] Audit, Outbox & GPS
+    // [ops] Audit, Outbox, GPS & Notifications
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<GpsRouteHistory> GpsRouteHistories => Set<GpsRouteHistory>();
+    public DbSet<UserNotification> Notifications => Set<UserNotification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

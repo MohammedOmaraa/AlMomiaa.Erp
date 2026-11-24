@@ -11,6 +11,7 @@ using AlMomiaa.Application.Common.Abstractions;
 using AlMomiaa.Application.Common.Models;
 using AlMomiaa.Application.Customers;
 using AlMomiaa.Application.Inventory;
+using AlMomiaa.Application.Notifications;
 using AlMomiaa.Application.Sales;
 using AlMomiaa.Domain.Catalog;
 using AlMomiaa.Domain.Customers;
@@ -33,6 +34,8 @@ public sealed class RecordingOperationsRealtimeNotifier : IOperationsRealtimeNot
     public ConcurrentQueue<OrderApprovedNotification> Approved { get; } = new();
     public ConcurrentQueue<OrderRejectedNotification> Rejected { get; } = new();
     public ConcurrentQueue<OrderUpdatedNotification> Updated { get; } = new();
+    public ConcurrentQueue<(Guid RecipientUserId, UserNotificationDto Notification)> UserNotifications { get; } = new();
+    public ConcurrentQueue<Guid> MarkedAllReadUsers { get; } = new();
 
     public Task NotifyOrderSubmittedAsync(OrderSubmittedNotification notification, CancellationToken ct = default)
     {
@@ -61,6 +64,18 @@ public sealed class RecordingOperationsRealtimeNotifier : IOperationsRealtimeNot
     public Task NotifyOrderUpdatedAsync(OrderUpdatedNotification notification, CancellationToken ct = default)
     {
         Updated.Enqueue(notification);
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyUserNotificationAsync(Guid recipientUserId, UserNotificationDto notification, CancellationToken ct = default)
+    {
+        UserNotifications.Enqueue((recipientUserId, notification));
+        return Task.CompletedTask;
+    }
+
+    public Task NotifyAllNotificationsReadAsync(Guid recipientUserId, CancellationToken ct = default)
+    {
+        MarkedAllReadUsers.Enqueue(recipientUserId);
         return Task.CompletedTask;
     }
 }

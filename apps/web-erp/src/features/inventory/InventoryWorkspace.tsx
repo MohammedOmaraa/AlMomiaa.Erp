@@ -62,6 +62,12 @@ export function InventoryWorkspace() {
   const canCreateWh = hasPermission(user, "settings:manage");
   const canTransfer = hasPermission(user, "inventory:transfer");
   const canAdjust = hasPermission(user, "inventory:adjust");
+  const isScopedWhKeeper = Boolean(
+    user?.roleCodes.includes("WH_KEEPER") &&
+      !user.roleCodes.includes("SUPER_ADMIN") &&
+      !user.roleCodes.includes("EXEC_MGR") &&
+      !user.roleCodes.includes("PURCH_MGR"),
+  );
 
   const loadWarehouses = useCallback(async () => {
     setLoading(true);
@@ -249,17 +255,28 @@ export function InventoryWorkspace() {
 
           <SurfaceCard title={isAr ? "أرصدة المستودع" : "Warehouse Stock Balances"}>
             <div className="space-y-4">
-              <div className="w-full sm:w-80">
-                <SelectField
-                  label={isAr ? "اختر المستودع" : "Select Warehouse"}
-                  value={selectedWhId}
-                  onChange={(e) => {
-                    setSelectedWhId(e.target.value);
-                    setPage(1);
-                  }}
-                  options={warehouses.map((w) => ({ value: String(w.id), label: `#${w.id} — ${w.warehouseCode} (${isAr ? w.nameAr : (w.nameEn ?? w.nameAr)})` }))}
-                />
-              </div>
+              {isScopedWhKeeper ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-surface-border bg-surface-canvas px-3 py-2 text-sm">
+                  <Badge tone="gold">{isAr ? "مستودعك المخصص (WH_KEEPER)" : "Your Assigned Warehouse (WH_KEEPER)"}</Badge>
+                  <span className="font-semibold text-text-primary">
+                    {warehouses[0]
+                      ? `#${warehouses[0].id} — ${warehouses[0].warehouseCode} (${isAr ? warehouses[0].nameAr : (warehouses[0].nameEn ?? warehouses[0].nameAr)})`
+                      : `#${selectedWhId}`}
+                  </span>
+                </div>
+              ) : (
+                <div className="w-full sm:w-80">
+                  <SelectField
+                    label={isAr ? "اختر المستودع" : "Select Warehouse"}
+                    value={selectedWhId}
+                    onChange={(e) => {
+                      setSelectedWhId(e.target.value);
+                      setPage(1);
+                    }}
+                    options={warehouses.map((w) => ({ value: String(w.id), label: `#${w.id} — ${w.warehouseCode} (${isAr ? w.nameAr : (w.nameEn ?? w.nameAr)})` }))}
+                  />
+                </div>
+              )}
               <DataTable columns={stockColumns} rows={stocks} rowKey={(s) => s.id} loading={loading} />
               <PaginationBar page={page} pageSize={25} totalCount={totalStocks} onPageChange={setPage} />
             </div>

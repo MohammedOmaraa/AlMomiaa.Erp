@@ -6,6 +6,7 @@ using AlMomiaa.Application.Inventory;
 using AlMomiaa.Application.Procurement;
 using AlMomiaa.Application.Sales;
 using AlMomiaa.Application.Finance;
+using AlMomiaa.Application.Notifications;
 using AlMomiaa.Application.Operations;
 
 namespace AlMomiaa.Application.Common.Abstractions;
@@ -105,4 +106,13 @@ public interface IOperationsModuleService
     Task<RoleDashboardDto> GetRoleDashboardAsync(string roleView, CancellationToken ct);
     Task<PagedResult<AuditLogDto>> GetAuditLogsAsync(GetAuditLogsQuery query, CancellationToken ct);
     Task<int> RecordGpsPingsAsync(RecordGpsPingsCommand command, CancellationToken ct);
+    Task<IReadOnlyList<LiveRepGpsDto>> GetLiveRepLocationsAsync(CancellationToken ct);
+    Task<IReadOnlyList<RepGpsHistoryPointDto>> GetRepGpsHistoryAsync(GetRepGpsHistoryQuery query, CancellationToken ct);
+}
+
+public interface INotificationsModuleService
+{
+    Task<NotificationsPageDto> GetMyNotificationsAsync(GetMyNotificationsQuery query, CancellationToken ct);
+    Task<MarkNotificationReadResponse> MarkNotificationReadAsync(Guid notificationId, CancellationToken ct);
+    Task<MarkAllNotificationsReadResponse> MarkAllNotificationsReadAsync(CancellationToken ct);
 }

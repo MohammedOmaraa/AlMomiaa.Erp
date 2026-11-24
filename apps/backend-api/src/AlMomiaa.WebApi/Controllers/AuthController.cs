@@ -1,7 +1,9 @@
-﻿using AlMomiaa.Application.Authentication.Commands.Login;
+﻿using AlMomiaa.Application.Authentication.Commands.ChangePassword;
+using AlMomiaa.Application.Authentication.Commands.Login;
 using AlMomiaa.Application.Authentication.Commands.Logout;
 using AlMomiaa.Application.Authentication.Commands.RefreshSession;
 using AlMomiaa.Application.Authentication.Contracts;
+using AlMomiaa.Application.Common.Abstractions;
 using AlMomiaa.Domain.Identity;
 using AlMomiaa.WebApi.Security;
 using MediatR;
@@ -14,7 +16,8 @@ namespace AlMomiaa.WebApi.Controllers;
 [Route("api/v1/auth")]
 public sealed class AuthController(
     IMediator mediator,
-    ITrustedOriginValidator originValidator) : ControllerBase
+    ITrustedOriginValidator originValidator,
+    ICurrentUserService currentUser) : ControllerBase
 {
     public const string RefreshCookieName = "almomiaa_refresh";
     public const string RefreshCookiePath = "/api/v1/auth";
@@ -133,6 +136,42 @@ public sealed class AuthController(
 
         var rawCookie = Request.Cookies[RefreshCookieName];
         await mediator.Send(new LogoutCommand(rawCookie), cancellationToken);
+        ClearRefreshCookie();
+        return NoContent();
+    }
+
+    [Authorize]
+    [HttpPost("change-password")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status422UnprocessableEntity)]
+    [EndpointSummary("Change the signed-in employee's password, rotate SecurityStamp, revoke all sessions, and clear refresh cookie")]
+    public async Task<IActionResult> ChangePassword(
+        [FromBody] ChangePasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!originValidator.IsTrustedOrigin(Request))
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Untrusted origin",
+                    Detail = "Cross-site authentication requests are not permitted.",
+                    Type = "https://api.almomiaa.sa/errors/untrusted-origin",
+                    Instance = HttpContext.Request.Path
+                });
+        }
+
+        if (currentUser.UserId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        await mediator.Send(new ChangePasswordCommand(currentUser.UserId, request), cancellationToken);
         ClearRefreshCookie();
         return NoContent();
     }

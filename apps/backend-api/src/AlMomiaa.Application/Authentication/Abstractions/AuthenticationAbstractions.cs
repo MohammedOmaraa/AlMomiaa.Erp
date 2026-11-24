@@ -1,4 +1,5 @@
-﻿using AlMomiaa.Application.Authentication.Commands.Login;
+﻿using AlMomiaa.Application.Authentication.Commands.ChangePassword;
+using AlMomiaa.Application.Authentication.Commands.Login;
 using AlMomiaa.Application.Authentication.Commands.RefreshSession;
 using AlMomiaa.Application.Authentication.Contracts;
 
@@ -34,6 +35,7 @@ public interface IAuthenticationService
     Task<LoginResult> LoginAsync(LoginRequest request, string clientIp, CancellationToken cancellationToken);
     Task<RefreshSessionResult> RefreshAsync(string? rawRefreshToken, CancellationToken cancellationToken);
     Task LogoutAsync(string? rawRefreshToken, CancellationToken cancellationToken);
+    Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken);
 }
 
 public sealed class SecurityStampUnavailableException(string message, Exception? innerException = null)

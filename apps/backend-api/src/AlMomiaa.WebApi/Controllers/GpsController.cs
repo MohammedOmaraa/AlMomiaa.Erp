@@ -21,4 +21,30 @@ public sealed class GpsController(IMediator mediator) : ControllerBase
         var count = await mediator.Send(new RecordGpsPingsCommand(request), ct);
         return Accepted(new { acceptedCount = count });
     }
+
+    [Authorize(Policy = "GpsTrackRoles")]
+    [HttpGet("live")]
+    [ProducesResponseType<IReadOnlyList<LiveRepGpsDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [EndpointSummary("Get latest live GPS coordinates for all field reps (restricted strictly to SUPER_ADMIN, EXEC_MGR, SALES_MGR)")]
+    public async Task<ActionResult<IReadOnlyList<LiveRepGpsDto>>> GetLiveLocations(CancellationToken ct)
+    {
+        var locations = await mediator.Send(new GetLiveRepLocationsQuery(), ct);
+        return Ok(locations);
+    }
+
+    [Authorize(Policy = "GpsTrackRoles")]
+    [HttpGet("reps/{repId:guid}/history")]
+    [ProducesResponseType<IReadOnlyList<RepGpsHistoryPointDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [EndpointSummary("Get recent GPS route history points for a specific rep (restricted strictly to SUPER_ADMIN, EXEC_MGR, SALES_MGR)")]
+    public async Task<ActionResult<IReadOnlyList<RepGpsHistoryPointDto>>> GetRepHistory(
+        Guid repId,
+        [FromQuery] int hours = 24,
+        [FromQuery] int limit = 100,
+        CancellationToken ct = default)
+    {
+        var points = await mediator.Send(new GetRepGpsHistoryQuery(repId, hours, limit), ct);
+        return Ok(points);
+    }
 }

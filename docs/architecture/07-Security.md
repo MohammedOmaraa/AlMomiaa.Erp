@@ -79,7 +79,9 @@ Seeded into `[id].[Roles]` and `[id].[RolePermissions]` and enforced identically
    - `JournalEntry.Post()` verifies the target `FiscalPeriod.IsClosed == false`.
 3. **Tier 3 — Row-Level Ownership / ABAC (EF Core Global Query Filters):**
    - `SALES_REP` is automatically scoped to `Customer.AssignedRepId == CurrentUser.Id` and their own `RepCustodyWallet` / `MobileVan`.
-   - `WH_KEEPER` is scoped to `Order.WarehouseId IN CurrentUser.AssignedWarehouseIds`.
+   - `WH_KEEPER` is strictly restricted to **exactly one assigned warehouse** (`AssignedWarehouseIds.Count == 1` and `DefaultWarehouseId == AssignedWarehouseIds[0]`) enforced on user creation, role assignment, warehouse assignment, and `Order.WarehouseId IN CurrentUser.AssignedWarehouseIds`.
+   - Live GPS tracking (`GET /api/v1/gps/live`, `GET /api/v1/gps/reps/{repId}/history`) is restricted strictly to `SUPER_ADMIN`, `EXEC_MGR`, and `SALES_MGR` (`403 Forbidden` for all other roles).
+   - Persistent notifications (`[ops].[Notifications]`) are strictly isolated per `RecipientUserId == CurrentUser.Id`.
 
 ---
 

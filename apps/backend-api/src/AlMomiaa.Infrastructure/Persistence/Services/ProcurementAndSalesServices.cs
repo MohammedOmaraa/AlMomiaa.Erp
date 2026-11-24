@@ -558,6 +558,35 @@ public sealed class SalesModuleService(
                 ct);
         }
 
+        await PersistAndPushRoleNotificationsAsync(
+            [CanonicalRolesAndPermissions.Roles.SalesManager, CanonicalRolesAndPermissions.Roles.SuperAdmin, CanonicalRolesAndPermissions.Roles.ExecutiveManager],
+            "OrderSubmitted",
+            order.RequiresFinanceCoApproval || order.HasStockShortage ? "warning" : "info",
+            $"طلب بيع جديد بانتظار الاعتماد: {order.OrderNumber}",
+            $"New Sell Request Pending Approval: {order.OrderNumber}",
+            $"المندوب: {repDisplayName} • الإجمالي: {order.TotalAmount:F2} ر.س",
+            $"Rep: {repDisplayName} • Total: SAR {order.TotalAmount:F2}",
+            "SalesOrder",
+            order.Id.ToString("D"),
+            utcNow,
+            ct);
+
+        if (order.RequiresFinanceCoApproval)
+        {
+            await PersistAndPushRoleNotificationsAsync(
+                [CanonicalRolesAndPermissions.Roles.Accountant, CanonicalRolesAndPermissions.Roles.ExecutiveManager, CanonicalRolesAndPermissions.Roles.SuperAdmin],
+                "CreditCoApprovalRequired",
+                "warning",
+                $"يتطلب موافقة ائتمانية مالية: {order.OrderNumber}",
+                $"Credit Co-Approval Required: {order.OrderNumber}",
+                $"الإجمالي: {order.TotalAmount:F2} ر.س • الحد الائتماني: {order.CustomerCreditLimitAtOrder:F2} ر.س",
+                $"Total: SAR {order.TotalAmount:F2} • Credit Limit: SAR {order.CustomerCreditLimitAtOrder:F2}",
+                "SalesOrder",
+                order.Id.ToString("D"),
+                utcNow,
+                ct);
+        }
+
         return MapOrder(order);
     }
 
@@ -642,6 +671,19 @@ public sealed class SalesModuleService(
             new OrderUpdatedNotification(order.Id, order.OrderNumber, order.RepId, order.Status, order.TotalAmount, "ManagerEdit"),
             ct);
 
+        await PersistAndPushUserNotificationsAsync(
+            [order.RepId],
+            "OrderUpdated",
+            "info",
+            $"تم تعديل طلبك بواسطة مدير المبيعات: {order.OrderNumber}",
+            $"Order Edited by Sales Manager: {order.OrderNumber}",
+            $"الإجمالي المحدّث: {order.TotalAmount:F2} ر.س",
+            $"Updated total: SAR {order.TotalAmount:F2}",
+            "SalesOrder",
+            order.Id.ToString("D"),
+            utcNow,
+            ct);
+
         return MapOrder(order);
     }
 
@@ -657,6 +699,19 @@ public sealed class SalesModuleService(
 
         await realtimeNotifier.NotifyOrderUpdatedAsync(
             new OrderUpdatedNotification(order.Id, order.OrderNumber, order.RepId, order.Status, order.TotalAmount, "PriceOverrideApproved"),
+            ct);
+
+        await PersistAndPushUserNotificationsAsync(
+            [order.RepId],
+            "OrderUpdated",
+            "info",
+            $"تم اعتماد استثناء السعر للطلب: {order.OrderNumber}",
+            $"Price Override Approved: {order.OrderNumber}",
+            $"الإجمالي: {order.TotalAmount:F2} ر.س",
+            $"Total: SAR {order.TotalAmount:F2}",
+            "SalesOrder",
+            order.Id.ToString("D"),
+            utcNow,
             ct);
 
         return MapOrder(order);
@@ -676,6 +731,19 @@ public sealed class SalesModuleService(
             new OrderUpdatedNotification(order.Id, order.OrderNumber, order.RepId, order.Status, order.TotalAmount, "CreditCoApproved"),
             ct);
 
+        await PersistAndPushUserNotificationsAsync(
+            [order.RepId],
+            "OrderUpdated",
+            "info",
+            $"تمت الموافقة المالية للطلب: {order.OrderNumber}",
+            $"Credit Co-Approved: {order.OrderNumber}",
+            $"الإجمالي: {order.TotalAmount:F2} ر.س",
+            $"Total: SAR {order.TotalAmount:F2}",
+            "SalesOrder",
+            order.Id.ToString("D"),
+            utcNow,
+            ct);
+
         return MapOrder(order);
     }
 
@@ -693,6 +761,27 @@ public sealed class SalesModuleService(
 
         await realtimeNotifier.NotifyOrderApprovedAsync(
             new OrderApprovedNotification(order.Id, order.OrderNumber, order.RepId, order.WarehouseId, order.TotalAmount, order.ApprovedAtUtc ?? utcNow),
+            ct);
+
+        var whKeeperIds = await db.Users.AsNoTracking()
+            .Where(u => u.IsActive
+                && u.Roles.Any(r => r.Role.RoleCode == CanonicalRolesAndPermissions.Roles.WarehouseKeeper)
+                && (u.DefaultWarehouseId == order.WarehouseId || u.Warehouses.Any(w => w.WarehouseId == order.WarehouseId)))
+            .Select(u => u.Id)
+            .ToListAsync(ct);
+
+        var recipients = whKeeperIds.Append(order.RepId).Distinct().ToList();
+        await PersistAndPushUserNotificationsAsync(
+            recipients,
+            "OrderApproved",
+            "success",
+            $"تم اعتماد طلب البيع: {order.OrderNumber}",
+            $"Sales Order Approved: {order.OrderNumber}",
+            $"الإجمالي: {order.TotalAmount:F2} ر.س — جاهز للتجهيز والشحن",
+            $"Total: SAR {order.TotalAmount:F2} — Ready for shipment",
+            "SalesOrder",
+            order.Id.ToString("D"),
+            utcNow,
             ct);
 
         return MapOrder(order);
@@ -723,11 +812,106 @@ public sealed class SalesModuleService(
         AuditAndOutboxHelper.AppendAudit(db, currentUser, "RejectSalesOrder", "SalesOrder", order.Id.ToString(), null, new { order.OrderNumber, order.RejectionReason }, utcNow);
         await db.SaveChangesAsync(ct);
 
+        var reason = order.RejectionReason ?? command.RejectionReason;
         await realtimeNotifier.NotifyOrderRejectedAsync(
-            new OrderRejectedNotification(order.Id, order.OrderNumber, order.RepId, order.RejectionReason ?? command.RejectionReason, utcNow),
+            new OrderRejectedNotification(order.Id, order.OrderNumber, order.RepId, reason, utcNow),
+            ct);
+
+        await PersistAndPushUserNotificationsAsync(
+            [order.RepId],
+            "OrderRejected",
+            "danger",
+            $"تم رفض طلب البيع: {order.OrderNumber}",
+            $"Sales Order Rejected: {order.OrderNumber}",
+            $"السبب: {reason}",
+            $"Reason: {reason}",
+            "SalesOrder",
+            order.Id.ToString("D"),
+            utcNow,
             ct);
 
         return MapOrder(order);
+    }
+
+    private async Task PersistAndPushRoleNotificationsAsync(
+        string[] roleCodes,
+        string eventType,
+        string severity,
+        string titleAr,
+        string titleEn,
+        string messageAr,
+        string messageEn,
+        string entityName,
+        string entityId,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
+        var recipientIds = await db.Users.AsNoTracking()
+            .Where(u => u.IsActive && u.Roles.Any(r => roleCodes.Contains(r.Role.RoleCode)))
+            .Select(u => u.Id)
+            .Distinct()
+            .ToListAsync(ct);
+
+        await PersistAndPushUserNotificationsAsync(
+            recipientIds,
+            eventType,
+            severity,
+            titleAr,
+            titleEn,
+            messageAr,
+            messageEn,
+            entityName,
+            entityId,
+            utcNow,
+            ct);
+    }
+
+    private async Task PersistAndPushUserNotificationsAsync(
+        IEnumerable<Guid> recipientIds,
+        string eventType,
+        string severity,
+        string titleAr,
+        string titleEn,
+        string messageAr,
+        string messageEn,
+        string entityName,
+        string entityId,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
+        var targets = recipientIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (targets.Count == 0)
+        {
+            return;
+        }
+
+        var created = new List<Domain.SystemOps.UserNotification>(targets.Count);
+        foreach (var recipientId in targets)
+        {
+            var entity = Domain.SystemOps.UserNotification.Create(
+                recipientId,
+                eventType,
+                severity,
+                titleAr,
+                titleEn,
+                messageAr,
+                messageEn,
+                entityName,
+                entityId,
+                utcNow);
+            db.Notifications.Add(entity);
+            created.Add(entity);
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        foreach (var item in created)
+        {
+            await realtimeNotifier.NotifyUserNotificationAsync(
+                item.RecipientUserId,
+                NotificationsModuleService.MapDto(item),
+                ct);
+        }
     }
 
     public async Task<InvoiceDto> ConfirmOrderShipmentAsync(ConfirmOrderShipmentCommand command, CancellationToken ct)

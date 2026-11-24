@@ -541,4 +541,69 @@ public sealed class OperationsModuleService(
         await db.SaveChangesAsync(ct);
         return command.Request.Pings.Length;
     }
+
+    public async Task<IReadOnlyList<LiveRepGpsDto>> GetLiveRepLocationsAsync(CancellationToken ct)
+    {
+        var utcNow = timeProvider.GetUtcNow().UtcDateTime;
+        var recentCutoff = utcNow.AddMinutes(-2);
+
+        var latestByRep = await db.GpsRouteHistories
+            .AsNoTracking()
+            .GroupBy(g => g.RepId)
+            .Select(grp => grp.OrderByDescending(x => x.RecordedAtUtc).ThenByDescending(x => x.Id).First())
+            .ToListAsync(ct);
+
+        if (latestByRep.Count == 0)
+        {
+            return [];
+        }
+
+        var repIds = latestByRep.Select(x => x.RepId).Distinct().ToList();
+        var users = await db.Users
+            .AsNoTracking()
+            .Where(u => repIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, ct);
+
+        return latestByRep
+            .OrderByDescending(x => x.RecordedAtUtc)
+            .Select(ping =>
+            {
+                users.TryGetValue(ping.RepId, out var rep);
+                return new LiveRepGpsDto(
+                    ping.RepId,
+                    rep?.EmployeeCode ?? "UNKNOWN",
+                    rep?.FullNameAr ?? "مندوب مبيعات",
+                    rep?.FullNameEn,
+                    rep?.Phone ?? string.Empty,
+                    ping.Latitude,
+                    ping.Longitude,
+                    ping.AccuracyMeters,
+                    ping.NearCustomerId,
+                    ping.RecordedAtUtc,
+                    ping.RecordedAtUtc >= recentCutoff);
+            })
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<RepGpsHistoryPointDto>> GetRepGpsHistoryAsync(GetRepGpsHistoryQuery query, CancellationToken ct)
+    {
+        var hours = Math.Clamp(query.Hours, 1, 168);
+        var limit = Math.Clamp(query.Limit, 1, 500);
+        var sinceUtc = timeProvider.GetUtcNow().UtcDateTime.AddHours(-hours);
+
+        return await db.GpsRouteHistories
+            .AsNoTracking()
+            .Where(g => g.RepId == query.RepId && g.RecordedAtUtc >= sinceUtc)
+            .OrderByDescending(g => g.RecordedAtUtc)
+            .ThenByDescending(g => g.Id)
+            .Take(limit)
+            .Select(g => new RepGpsHistoryPointDto(
+                g.Id,
+                g.Latitude,
+                g.Longitude,
+                g.AccuracyMeters,
+                g.NearCustomerId,
+                g.RecordedAtUtc))
+            .ToListAsync(ct);
+    }
 }

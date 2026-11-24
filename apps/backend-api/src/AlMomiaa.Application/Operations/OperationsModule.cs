@@ -28,6 +28,30 @@ public sealed record GpsPingItemRequest(decimal Latitude, decimal Longitude, dec
 public sealed record RecordGpsPingsRequest(GpsPingItemRequest[] Pings);
 public sealed record RecordGpsPingsCommand(RecordGpsPingsRequest Request) : IRequest<int>;
 
+public sealed record LiveRepGpsDto(
+    Guid RepId,
+    string EmployeeCode,
+    string FullNameAr,
+    string? FullNameEn,
+    string Phone,
+    decimal Latitude,
+    decimal Longitude,
+    decimal? AccuracyMeters,
+    Guid? NearCustomerId,
+    DateTime RecordedAtUtc,
+    bool IsOnlineRecent);
+
+public sealed record RepGpsHistoryPointDto(
+    long Id,
+    decimal Latitude,
+    decimal Longitude,
+    decimal? AccuracyMeters,
+    Guid? NearCustomerId,
+    DateTime RecordedAtUtc);
+
+public sealed record GetLiveRepLocationsQuery : IRequest<IReadOnlyList<LiveRepGpsDto>>;
+public sealed record GetRepGpsHistoryQuery(Guid RepId, int Hours = 24, int Limit = 100) : IRequest<IReadOnlyList<RepGpsHistoryPointDto>>;
+
 public sealed class GetAuditLogsQueryValidator : AbstractValidator<GetAuditLogsQuery>
 {
     public GetAuditLogsQueryValidator()
@@ -67,4 +91,12 @@ public sealed class GetAuditLogsHandler(IOperationsModuleService service) : IReq
 public sealed class RecordGpsPingsHandler(IOperationsModuleService service) : IRequestHandler<RecordGpsPingsCommand, int>
 {
     public Task<int> Handle(RecordGpsPingsCommand request, CancellationToken ct) => service.RecordGpsPingsAsync(request, ct);
+}
+public sealed class GetLiveRepLocationsHandler(IOperationsModuleService service) : IRequestHandler<GetLiveRepLocationsQuery, IReadOnlyList<LiveRepGpsDto>>
+{
+    public Task<IReadOnlyList<LiveRepGpsDto>> Handle(GetLiveRepLocationsQuery request, CancellationToken ct) => service.GetLiveRepLocationsAsync(ct);
+}
+public sealed class GetRepGpsHistoryHandler(IOperationsModuleService service) : IRequestHandler<GetRepGpsHistoryQuery, IReadOnlyList<RepGpsHistoryPointDto>>
+{
+    public Task<IReadOnlyList<RepGpsHistoryPointDto>> Handle(GetRepGpsHistoryQuery request, CancellationToken ct) => service.GetRepGpsHistoryAsync(request, ct);
 }

@@ -6,7 +6,6 @@ import {
   AlertBanner,
   Badge,
   Button,
-  JsonResponseViewer,
   KeyValueList,
   SummaryCard,
   SurfaceCard,
@@ -133,15 +132,6 @@ export function DashboardWorkspace() {
           )}
         </div>
       </SurfaceCard>
-
-      {(exec || roleData) && (
-        <JsonResponseViewer
-          method="GET"
-          endpoint={exec ? "/api/v1/dashboards/executive" : `/api/v1/dashboards/role/${roleView}`}
-          status={200}
-          payload={{ health, executive: exec, roleDashboard: roleData }}
-        />
-      )}
     </ErpAppLayout>
   );
 }

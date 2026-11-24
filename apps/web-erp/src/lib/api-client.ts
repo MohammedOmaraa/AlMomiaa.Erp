@@ -4,7 +4,6 @@ import {
   createAuthService,
   createErpApi,
   extractProblemDetails,
-  type ApiCallLog,
   type AuthenticationResponse,
 } from "@almomiaa/api-client";
 import type { Locale } from "@almomiaa/ui";
@@ -14,7 +13,6 @@ const DEFAULT_API_BASE_URL = "/api/v1";
 let currentLocale: Locale = "ar-SA";
 let onSessionRefreshedListener: ((session: AuthenticationResponse) => void) | null = null;
 let onAuthFailureListener: (() => void) | null = null;
-const apiCallListeners = new Set<(log: ApiCallLog) => void>();
 
 export const accessTokenStore = createAccessTokenStore();
 
@@ -40,9 +38,6 @@ const { http, refreshSingleFlight } = createApiClient({
   onAuthFailure: () => {
     onAuthFailureListener?.();
   },
-  onApiCall: (log) => {
-    apiCallListeners.forEach((listener) => listener(log));
-  },
 });
 
 export const apiHttpClient = http;
@@ -51,13 +46,6 @@ export const erpApi = createErpApi(http);
 
 export function setApiClientLocale(locale: Locale): void {
   currentLocale = locale;
-}
-
-export function subscribeApiActivity(listener: (log: ApiCallLog) => void): () => void {
-  apiCallListeners.add(listener);
-  return () => {
-    apiCallListeners.delete(listener);
-  };
 }
 
 export function subscribeAuthClientEvents(handlers: {

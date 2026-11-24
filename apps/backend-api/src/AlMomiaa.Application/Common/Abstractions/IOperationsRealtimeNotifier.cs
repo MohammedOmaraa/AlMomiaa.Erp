@@ -1,3 +1,5 @@
+using AlMomiaa.Application.Notifications;
+
 namespace AlMomiaa.Application.Common.Abstractions;
 
 public sealed record OrderSubmittedNotification(
@@ -52,4 +54,6 @@ public interface IOperationsRealtimeNotifier
     Task NotifyOrderApprovedAsync(OrderApprovedNotification notification, CancellationToken ct = default);
     Task NotifyOrderRejectedAsync(OrderRejectedNotification notification, CancellationToken ct = default);
     Task NotifyOrderUpdatedAsync(OrderUpdatedNotification notification, CancellationToken ct = default);
+    Task NotifyUserNotificationAsync(Guid recipientUserId, UserNotificationDto notification, CancellationToken ct = default);
+    Task NotifyAllNotificationsReadAsync(Guid recipientUserId, CancellationToken ct = default);
 }

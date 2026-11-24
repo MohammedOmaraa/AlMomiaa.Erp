@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import "@almomiaa/ui/tokens.css";
 import "./globals.css";
-import { ApiActivityProvider } from "../providers/ApiActivityProvider";
 import { AuthProvider } from "../providers/AuthProvider";
 import { LocaleProvider } from "../providers/LocaleProvider";
 import { RealtimeProvider } from "../providers/RealtimeProvider";
@@ -27,11 +26,9 @@ export default async function RootLayout({ children }: RootLayoutProps) {
       <body>
         <ThemeProvider>
           <LocaleProvider initialLocale={locale}>
-            <ApiActivityProvider>
-              <AuthProvider>
-                <RealtimeProvider>{children}</RealtimeProvider>
-              </AuthProvider>
-            </ApiActivityProvider>
+            <AuthProvider>
+              <RealtimeProvider>{children}</RealtimeProvider>
+            </AuthProvider>
           </LocaleProvider>
         </ThemeProvider>
       </body>

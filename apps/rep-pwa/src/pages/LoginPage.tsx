@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertBanner,
   BrandLogo,
@@ -16,6 +16,8 @@ import { useApp } from "../providers/AppProviders";
 export function LoginPage() {
   const { locale, setLocale, theme, setTheme, t, authStatus, login } = useApp();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const passwordChanged = searchParams.get("passwordChanged") === "1";
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -58,6 +60,9 @@ export function LoginPage() {
 
         <SurfaceCard title={t.auth.signIn}>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {passwordChanged ? (
+              <AlertBanner tone="success" message={t.auth.passwordChangedBanner} />
+            ) : null}
             {error ? <AlertBanner tone="danger" message={error} /> : null}
 
             <TextField
