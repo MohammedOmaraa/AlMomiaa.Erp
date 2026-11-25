@@ -4,6 +4,7 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
 COPY AlMomiaa.Erp.sln ./
+COPY Directory.Build.props ./
 COPY src/AlMomiaa.Domain/AlMomiaa.Domain.csproj src/AlMomiaa.Domain/
 COPY src/AlMomiaa.Application/AlMomiaa.Application.csproj src/AlMomiaa.Application/
 COPY src/AlMomiaa.Infrastructure/AlMomiaa.Infrastructure.csproj src/AlMomiaa.Infrastructure/
