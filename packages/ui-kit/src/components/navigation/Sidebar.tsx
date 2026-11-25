@@ -32,9 +32,16 @@ export function Sidebar({
       </div>
       <nav aria-label={brandLabel} className="min-h-0 flex-1 overflow-y-auto">
         <ul className="space-y-1">
-          {items.map(({ id, ...item }) => (
+          {items.map(({ id, onNavigate: itemOnNavigate, ...item }) => (
             <li key={id}>
-              <SidebarNavItem {...item} collapsed={compact} onNavigate={onNavigate} />
+              <SidebarNavItem
+                {...item}
+                collapsed={compact}
+                onNavigate={(event) => {
+                  itemOnNavigate?.(event);
+                  onNavigate?.();
+                }}
+              />
             </li>
           ))}
         </ul>

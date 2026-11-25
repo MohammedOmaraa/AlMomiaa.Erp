@@ -31,6 +31,7 @@ const apiBaseUrl = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
 const { http, refreshSingleFlight } = createApiClient({
   baseURL: apiBaseUrl,
   tokenStore: accessTokenStore,
+  timeoutMs: 45000,
   getLocale: () => currentLocale,
   onSessionRefreshed: (session) => {
     onSessionRefreshedListener?.(session);

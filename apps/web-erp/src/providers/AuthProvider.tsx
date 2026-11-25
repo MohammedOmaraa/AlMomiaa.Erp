@@ -67,17 +67,17 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     }
     bootstrapStartedRef.current = true;
 
-    const controller = new AbortController();
+    let active = true;
     authService
-      .refresh(controller.signal)
+      .refresh()
       .then((session) => {
-        if (!controller.signal.aborted) {
+        if (active) {
           setUser(session.user);
           setStatus("authenticated");
         }
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
+        if (active) {
           accessTokenStore.clearAccessToken();
           setUser(null);
           setStatus("unauthenticated");
@@ -85,7 +85,7 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
       });
 
     return () => {
-      controller.abort();
+      active = false;
     };
   }, []);
 

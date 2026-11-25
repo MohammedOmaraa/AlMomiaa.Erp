@@ -32,6 +32,7 @@ export function setApiLocale(locale: Locale): void {
 const { http, refreshSingleFlight } = createApiClient({
   baseURL: apiBaseUrl,
   tokenStore: accessTokenStore,
+  timeoutMs: 45000,
   getLocale: () => currentLocale,
   onAuthFailure: () => {
     for (const listener of authFailureListeners) {

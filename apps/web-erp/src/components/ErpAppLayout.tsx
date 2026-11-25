@@ -174,6 +174,15 @@ export function ErpAppLayout({
       href: item.href,
       active: item.href === "/" ? pathname === "/" : pathname.startsWith(item.href),
       icon: item.icon,
+      onNavigate: (event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+          return;
+        }
+        event.preventDefault();
+        if (pathname !== item.href) {
+          router.push(item.href);
+        }
+      },
     }));
 
   const hasRoleAccess =

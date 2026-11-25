@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 export type SidebarNavItemProps = {
   label: string;
@@ -8,7 +8,7 @@ export type SidebarNavItemProps = {
   collapsed?: boolean;
   placeholder?: boolean;
   placeholderLabel?: string;
-  onNavigate?: () => void;
+  onNavigate?: (event: MouseEvent<HTMLElement>) => void;
 };
 
 export function SidebarNavItem({
