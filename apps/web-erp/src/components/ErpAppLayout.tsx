@@ -80,7 +80,7 @@ export function ErpAppLayout({
   const pathname = usePathname();
   const { locale, setLocale } = useLocale();
   const { resolvedTheme, setTheme } = useTheme();
-  const { status, user, logout, changePassword } = useAuth();
+  const { status, user, slowBootstrap, bootstrapError, retrySession, logout, changePassword } = useAuth();
   const {
     hubState,
     toasts,
@@ -123,14 +123,50 @@ export function ErpAppLayout({
   const theme: Theme = mounted && resolvedTheme === "dark" ? "dark" : "light";
 
   if (status !== "authenticated" || !user) {
+    const isUnauthenticated = status === "unauthenticated";
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-surface-canvas p-6 text-text-primary">
         <div
           role="status"
-          className="w-full max-w-sm rounded-xl border border-surface-border bg-surface-card p-6 text-center"
+          className="w-full max-w-md space-y-4 rounded-xl border border-surface-border bg-surface-card p-6 text-center"
         >
-          <div className="mx-auto mb-3 h-4 w-3/4 animate-pulse rounded bg-surface-skeleton" />
-          <p className="text-sm text-text-secondary">{t.auth.checkingSession}</p>
+          {!isUnauthenticated && (
+            <div className="mx-auto h-4 w-3/4 animate-pulse rounded bg-surface-skeleton" />
+          )}
+          <p className="text-sm font-medium text-text-secondary">
+            {isUnauthenticated
+              ? isAr
+                ? "يرجى تسجيل الدخول للمتابعة..."
+                : "Redirecting to Sign In..."
+              : t.auth.checkingSession}
+          </p>
+
+          {bootstrapError && (
+            <AlertBanner
+              tone="warning"
+              title={isAr ? "تنبيه الاتصال بالخادم" : "Server Connection Notice"}
+              message={bootstrapError}
+            />
+          )}
+
+          {!isUnauthenticated && slowBootstrap && (
+            <p className="text-xs text-text-muted">
+              {isAr
+                ? "قد يستغرق الخادم السحابي بضع ثوانٍ للاستيقاظ لأول مرة. يمكنك الانتظار قليلاً أو المحاولة الآن."
+                : "The cloud server may take a few seconds to wake up on the first request. You can wait or retry now."}
+            </p>
+          )}
+
+          {(slowBootstrap || isUnauthenticated || Boolean(bootstrapError)) && (
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+              <Button variant="secondary" size="compact" onClick={() => void retrySession()}>
+                {isAr ? "إعادة المحاولة" : "Retry"}
+              </Button>
+              <Button size="compact" onClick={() => router.replace("/login")}>
+                {isAr ? "تسجيل الدخول" : "Go to Sign In"}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );

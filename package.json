@@ -8,7 +8,8 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test --continue",
-    "build-storybook": "turbo run build-storybook --filter=@almomiaa/design-system-studio"
+    "build-storybook": "turbo run build-storybook --filter=@almomiaa/design-system-studio",
+    "verify:live": "node scripts/verify-deployed-apps.mjs"
   },
   "devDependencies": {
     "@types/node": "22.15.30",

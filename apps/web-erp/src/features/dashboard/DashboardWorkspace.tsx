@@ -22,7 +22,7 @@ type RoleView = "sales" | "inventory" | "warehouse" | "finance" | "rep";
 
 export function DashboardWorkspace() {
   const { locale } = useLocale();
-  const { user } = useAuth();
+  const { status, user } = useAuth();
   const isAr = locale === "ar-SA";
 
   const [health, setHealth] = useState<HealthDto | null>(null);
@@ -59,8 +59,9 @@ export function DashboardWorkspace() {
   );
 
   useEffect(() => {
+    if (status !== "authenticated" || !user) return;
     void loadAll(roleView);
-  }, [loadAll, roleView]);
+  }, [loadAll, roleView, status, user]);
 
   const roleTabs = [
     { id: "sales", label: isAr ? "المبيعات" : "Sales", disabled: !hasPermission(user, "dashboards:sales") },

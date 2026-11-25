@@ -30,7 +30,7 @@ import { useLocale } from "../../providers/LocaleProvider";
 
 export function CustomersWorkspace() {
   const { locale } = useLocale();
-  const { user } = useAuth();
+  const { status, user } = useAuth();
   const isAr = locale === "ar-SA";
 
   const [tab, setTab] = useState("list");
@@ -111,8 +111,9 @@ export function CustomersWorkspace() {
   }, [assignedRepId, bulkRepId, page, search, user]);
 
   useEffect(() => {
+    if (status !== "authenticated" || !user) return;
     void loadData();
-  }, [loadData]);
+  }, [loadData, status, user]);
 
   const filteredCustomers = useMemo(() => {
     if (!repFilterId) return customers;

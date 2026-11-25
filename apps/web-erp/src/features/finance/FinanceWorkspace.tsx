@@ -32,7 +32,7 @@ function randomSha256Hex(): string {
 
 export function FinanceWorkspace() {
   const { locale } = useLocale();
-  const { user } = useAuth();
+  const { status, user } = useAuth();
   const isAr = locale === "ar-SA";
 
   const [tab, setTab] = useState("accounts");
@@ -104,8 +104,9 @@ export function FinanceWorkspace() {
   }, [canFinanceDash, handoverSafeId, journalPage, verifyBankId]);
 
   useEffect(() => {
+    if (status !== "authenticated" || !user) return;
     void loadData();
-  }, [loadData]);
+  }, [loadData, status, user]);
 
   const runFinanceAction = async (title: string, fn: () => Promise<string | void>) => {
     setSubmitting(true);

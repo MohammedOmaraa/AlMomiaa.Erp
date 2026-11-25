@@ -28,7 +28,7 @@ import { useRealtime } from "../../providers/RealtimeProvider";
 
 export function SalesWorkspace() {
   const { locale } = useLocale();
-  const { user } = useAuth();
+  const { status, user } = useAuth();
   const { eventVersion } = useRealtime();
   const isAr = locale === "ar-SA";
 
@@ -129,8 +129,9 @@ export function SalesWorkspace() {
   }, [page, statusFilter]);
 
   useEffect(() => {
+    if (status !== "authenticated" || !user) return;
     void loadOrders();
-  }, [loadOrders, eventVersion]);
+  }, [loadOrders, eventVersion, status, user]);
 
   useEffect(() => {
     if (user && !dspDriverId) setDspDriverId(user.id);

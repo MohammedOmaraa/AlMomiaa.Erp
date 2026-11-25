@@ -76,6 +76,7 @@ export async function proxyToBackend(request: NextRequest, targetPathname: strin
       body: body && body.byteLength > 0 ? body : undefined,
       redirect: "manual",
       cache: "no-store",
+      signal: AbortSignal.timeout(25_000),
     });
 
     const responseHeaders = new Headers();
@@ -118,14 +119,19 @@ export async function proxyToBackend(request: NextRequest, targetPathname: strin
       status: upstreamResponse.status,
       headers: responseHeaders,
     });
-  } catch {
+  } catch (error: unknown) {
+    const isTimeout =
+      error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    const status = isTimeout ? 504 : 502;
     return NextResponse.json(
       {
-        title: "Upstream backend unreachable",
-        status: 502,
-        detail: "The backend API is starting up or temporarily unreachable. Please retry in a few seconds.",
+        title: isTimeout ? "Upstream backend timeout" : "Upstream backend unreachable",
+        status,
+        detail: isTimeout
+          ? "The backend API is waking up and took too long to respond. Please retry in a few seconds."
+          : "The backend API is starting up or temporarily unreachable. Please retry in a few seconds.",
       },
-      { status: 502 },
+      { status },
     );
   }
 }

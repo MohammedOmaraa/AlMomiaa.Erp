@@ -23,7 +23,7 @@ import { useLocale } from "../../providers/LocaleProvider";
 
 export function PurchasingWorkspace() {
   const { locale } = useLocale();
-  const { user } = useAuth();
+  const { status, user } = useAuth();
   const isAr = locale === "ar-SA";
 
   const [tab, setTab] = useState("pos");
@@ -93,8 +93,9 @@ export function PurchasingWorkspace() {
   }, [cntPoId, grnPoId, poSupId]);
 
   useEffect(() => {
+    if (status !== "authenticated" || !user) return;
     void loadData();
-  }, [loadData]);
+  }, [loadData, status, user]);
 
   const handleCreateSupplier = async (e: FormEvent) => {
     e.preventDefault();

@@ -51,6 +51,8 @@ interface AppContextValue {
   setTheme: (theme: Theme) => void;
   user: AuthenticatedUser | null;
   authStatus: "loading" | "authenticated" | "unauthenticated";
+  slowBootstrap: boolean;
+  retrySession: () => Promise<void>;
   login: (req: LoginRequest) => Promise<AuthenticatedUser>;
   logout: () => Promise<void>;
   changePassword: (req: ChangePasswordRequest) => Promise<void>;
@@ -80,6 +82,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [authStatus, setAuthStatus] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
+  const [slowBootstrap, setSlowBootstrap] = useState(false);
+  const mountedRef = useRef(true);
   const [isOnline, setIsOnline] = useState<boolean>(
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
@@ -184,32 +188,61 @@ export function AppProviders({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = subscribeAuthFailure(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const retrySession = useCallback(async () => {
+    if (!mountedRef.current) return;
+    setAuthStatus("loading");
+    setSlowBootstrap(false);
+
+    const slowTimer = window.setTimeout(() => {
+      if (mountedRef.current) {
+        setSlowBootstrap(true);
+      }
+    }, 5_000);
+
+    const controller = new AbortController();
+    const timeoutTimer = window.setTimeout(() => {
+      controller.abort();
+    }, 18_000);
+
+    try {
+      const res = await authService.refresh(controller.signal);
+      if (!mountedRef.current) return;
+      setUser(res.user);
+      setSlowBootstrap(false);
+      setAuthStatus("authenticated");
+    } catch {
+      if (!mountedRef.current) return;
       accessTokenStore.clearAccessToken();
       setUser(null);
+      setSlowBootstrap(false);
+      setAuthStatus("unauthenticated");
+    } finally {
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(timeoutTimer);
+    }
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeAuthFailure(() => {
+      if (!mountedRef.current) return;
+      accessTokenStore.clearAccessToken();
+      setUser(null);
+      setSlowBootstrap(false);
       setAuthStatus("unauthenticated");
     });
 
-    let active = true;
-    authService
-      .refresh()
-      .then((res) => {
-        if (!active) return;
-        setUser(res.user);
-        setAuthStatus("authenticated");
-      })
-      .catch(() => {
-        if (!active) return;
-        accessTokenStore.clearAccessToken();
-        setUser(null);
-        setAuthStatus("unauthenticated");
-      });
+    void retrySession();
 
     return () => {
-      active = false;
       unsubscribe();
     };
-  }, []);
+  }, [retrySession]);
 
   useEffect(() => {
     if (authStatus !== "authenticated" || !user) {
@@ -305,6 +338,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
       setTheme,
       user,
       authStatus,
+      slowBootstrap,
+      retrySession,
       login,
       logout,
       changePassword,
@@ -333,6 +368,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
       setTheme,
       user,
       authStatus,
+      slowBootstrap,
+      retrySession,
       login,
       logout,
       changePassword,

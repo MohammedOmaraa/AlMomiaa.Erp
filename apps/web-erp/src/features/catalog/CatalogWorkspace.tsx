@@ -120,7 +120,7 @@ function formatWithVat(price: number, vatRate: number): number {
 
 export function CatalogWorkspace() {
   const { locale } = useLocale();
-  const { user } = useAuth();
+  const { status, user } = useAuth();
   const isAr = locale === "ar-SA";
 
   const [tab, setTab] = useState("products");
@@ -255,8 +255,9 @@ export function CatalogWorkspace() {
   }, [brandId, catId, lookupCatId, page, plUnitId, search]);
 
   useEffect(() => {
+    if (status !== "authenticated" || !user) return;
     void loadData();
-  }, [loadData]);
+  }, [loadData, status, user]);
 
   const handleOpenAvailability = async (productId: string) => {
     setAvailabilityOpen(true);

@@ -15,6 +15,7 @@ import {
 import { ErpAppLayout } from "../../components/ErpAppLayout";
 import { erpApi, formatApiError } from "../../lib/api-client";
 import { formatDateTime } from "../../lib/formatters";
+import { useAuth } from "../../providers/AuthProvider";
 import { useLocale } from "../../providers/LocaleProvider";
 
 const GPS_ALLOWED_ROLES = ["SUPER_ADMIN", "EXEC_MGR", "SALES_MGR"] as const;
@@ -176,6 +177,7 @@ function HybridGoogleMap({
 
 export function GpsTrackingWorkspace() {
   const { locale } = useLocale();
+  const { status, user } = useAuth();
   const isAr = locale === "ar-SA";
 
   const [locations, setLocations] = useState<LiveRepGpsDto[]>([]);
@@ -206,11 +208,12 @@ export function GpsTrackingWorkspace() {
   }, []);
 
   useEffect(() => {
+    if (status !== "authenticated" || !user) return;
     void loadLive();
-  }, [loadLive]);
+  }, [loadLive, status, user]);
 
   useEffect(() => {
-    if (!autoRefresh) return;
+    if (!autoRefresh || status !== "authenticated" || !user) return;
     setCountdown(REFRESH_SECONDS);
     const tick = setInterval(() => {
       setCountdown((prev) => {
@@ -222,7 +225,7 @@ export function GpsTrackingWorkspace() {
       });
     }, 1000);
     return () => clearInterval(tick);
-  }, [autoRefresh, loadLive]);
+  }, [autoRefresh, loadLive, status, user]);
 
   const selectedRep = useMemo(
     () => locations.find((l) => l.repId === selectedRepId) ?? locations[0] ?? null,

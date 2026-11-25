@@ -24,7 +24,7 @@ import { useLocale } from "../../providers/LocaleProvider";
 
 export function InventoryWorkspace() {
   const { locale } = useLocale();
-  const { user } = useAuth();
+  const { status, user } = useAuth();
   const isAr = locale === "ar-SA";
 
   const [tab, setTab] = useState("stocks");
@@ -103,12 +103,14 @@ export function InventoryWorkspace() {
   }, [cntProdId, page, selectedWhId, trfProdId]);
 
   useEffect(() => {
+    if (status !== "authenticated" || !user) return;
     void loadWarehouses();
-  }, [loadWarehouses]);
+  }, [loadWarehouses, status, user]);
 
   useEffect(() => {
+    if (status !== "authenticated" || !user) return;
     void loadStocks();
-  }, [loadStocks]);
+  }, [loadStocks, status, user]);
 
   const handleCreateWarehouse = async (e: FormEvent) => {
     e.preventDefault();

@@ -23,7 +23,7 @@ import { useLocale } from "../../providers/LocaleProvider";
 
 export function ReportsWorkspace() {
   const { locale } = useLocale();
-  const { user } = useAuth();
+  const { status, user } = useAuth();
   const isAr = locale === "ar-SA";
 
   const [tab, setTab] = useState("audit");
@@ -71,8 +71,9 @@ export function ReportsWorkspace() {
   );
 
   useEffect(() => {
+    if (status !== "authenticated" || !user) return;
     void loadAudit();
-  }, [loadAudit]);
+  }, [loadAudit, status, user]);
 
   const handleSendGps = async (e: FormEvent) => {
     e.preventDefault();

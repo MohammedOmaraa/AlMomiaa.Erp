@@ -39,7 +39,7 @@ const CANONICAL_PERMISSIONS = [
 
 export function UsersWorkspace() {
   const { locale } = useLocale();
-  const { user } = useAuth();
+  const { status, user } = useAuth();
   const isAr = locale === "ar-SA";
 
   const [activeTab, setActiveTab] = useState("employees");
@@ -123,8 +123,9 @@ export function UsersWorkspace() {
   }, [canManagePerms, canManageUsers, page, search]);
 
   useEffect(() => {
+    if (status !== "authenticated" || !user) return;
     void loadData();
-  }, [loadData]);
+  }, [loadData, status, user]);
 
   const selectedNewRole = roles.find((r) => String(r.id) === newUserRoleId);
   const isCreatingWhKeeper = selectedNewRole?.roleCode === "WH_KEEPER";

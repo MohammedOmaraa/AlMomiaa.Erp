@@ -95,6 +95,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       headers: upstreamHeaders,
       body: body ? new Uint8Array(body) : undefined,
       redirect: "manual",
+      signal: AbortSignal.timeout(25_000),
     });
 
     res.statusCode = upstreamResponse.status;
@@ -128,14 +129,19 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     const responseBuffer = Buffer.from(await upstreamResponse.arrayBuffer());
     res.end(responseBuffer);
-  } catch {
-    res.statusCode = 502;
+  } catch (error: unknown) {
+    const isTimeout =
+      error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    const status = isTimeout ? 504 : 502;
+    res.statusCode = status;
     res.setHeader("Content-Type", "application/problem+json");
     res.end(
       JSON.stringify({
-        title: "Upstream backend unreachable",
-        status: 502,
-        detail: "The backend API is starting up or temporarily unreachable. Retry in a few seconds.",
+        title: isTimeout ? "Upstream backend timeout" : "Upstream backend unreachable",
+        status,
+        detail: isTimeout
+          ? "The backend API is waking up and took too long to respond. Retry in a few seconds."
+          : "The backend API is starting up or temporarily unreachable. Retry in a few seconds.",
       }),
     );
   }
