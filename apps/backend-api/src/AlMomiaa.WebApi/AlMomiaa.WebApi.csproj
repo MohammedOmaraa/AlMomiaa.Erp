@@ -3,7 +3,6 @@
     <AssemblyName>AlMomiaa.WebApi</AssemblyName>
     <RootNamespace>AlMomiaa.WebApi</RootNamespace>
     <UserSecretsId>almomiaa-erp-webapi-dev</UserSecretsId>
-    <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\AlMomiaa.Application\AlMomiaa.Application.csproj" />
