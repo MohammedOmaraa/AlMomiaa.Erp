@@ -46,7 +46,11 @@ export function LoginPage() {
     <div className="flex min-h-screen flex-col justify-between bg-surface-canvas px-4 py-6 text-text-primary">
       <div className="mx-auto flex w-full max-w-md items-center justify-end gap-2">
         <LocaleSwitcher value={locale} onChange={setLocale} />
-        <ThemeToggle value={theme} onChange={setTheme} />
+        <ThemeToggle
+          value={theme}
+          onChange={setTheme}
+          labels={{ light: t.auth.darkMode, dark: t.auth.lightMode }}
+        />
       </div>
 
       <div className="mx-auto my-auto w-full max-w-md space-y-6 py-8">

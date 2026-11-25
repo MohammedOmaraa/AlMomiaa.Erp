@@ -5,7 +5,8 @@
   "buildCommand": "cd ../.. && pnpm --filter @almomiaa/api-client build && pnpm --filter @almomiaa/ui build && pnpm --filter @almomiaa/rep-pwa build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/health", "destination": "/api/health" },
+    { "source": "/api/v1/:path*", "destination": "/api/proxy?__path=/api/v1/:path*" },
+    { "source": "/health", "destination": "/api/proxy?__path=/health" },
     {
       "source": "/((?!api/|assets/|icons/|manifest\\.webmanifest|sw\\.js|registerSW\\.js|workbox-.*\\.js).*)",
       "destination": "/index.html"

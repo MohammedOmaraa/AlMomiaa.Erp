@@ -77,9 +77,45 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+const THEME_STORAGE_KEY = "almomiaa-rep-theme";
+const LOCALE_STORAGE_KEY = "almomiaa-rep-locale";
+
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "light";
+  try {
+    const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return saved === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
+function readStoredLocale(): Locale {
+  if (typeof window === "undefined") return "ar-SA";
+  try {
+    const saved = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+    return saved === "en-US" ? "en-US" : "ar-SA";
+  } catch {
+    return "ar-SA";
+  }
+}
+
+function applyThemeToDocument(theme: Theme): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.setAttribute("data-theme", theme);
+  document.documentElement.classList.toggle("dark", theme === "dark");
+}
+
+function applyLocaleToDocument(locale: Locale): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.lang = locale === "ar-SA" ? "ar" : "en";
+  document.documentElement.dir = locale === "ar-SA" ? "rtl" : "ltr";
+  setApiLocale(locale);
+}
+
 export function AppProviders({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("ar-SA");
-  const [theme, setThemeState] = useState<Theme>("light");
+  const [locale, setLocaleState] = useState<Locale>(() => readStoredLocale());
+  const [theme, setThemeState] = useState<Theme>(() => readStoredTheme());
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [authStatus, setAuthStatus] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
   const [slowBootstrap, setSlowBootstrap] = useState(false);
@@ -96,20 +132,28 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [mutedPopups, setMutedPopupsState] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const localeRef = useRef<Locale>("ar-SA");
+  const localeRef = useRef<Locale>(locale);
   const mutedRef = useRef(false);
 
   const setLocale = useCallback((next: Locale) => {
     localeRef.current = next;
     setLocaleState(next);
-    setApiLocale(next);
-    document.documentElement.lang = next === "ar-SA" ? "ar" : "en";
-    document.documentElement.dir = next === "ar-SA" ? "rtl" : "ltr";
+    applyLocaleToDocument(next);
+    try {
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
+    } catch {
+      // Ignore storage quota / private-mode restrictions
+    }
   }, []);
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
-    document.documentElement.classList.toggle("dark", next === "dark");
+    applyThemeToDocument(next);
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, next);
+    } catch {
+      // Ignore storage quota / private-mode restrictions
+    }
   }, []);
 
   const setMutedPopups = useCallback((muted: boolean) => {
@@ -164,10 +208,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    document.documentElement.lang = "ar";
-    document.documentElement.dir = "rtl";
-    setApiLocale("ar-SA");
-  }, []);
+    localeRef.current = locale;
+    applyLocaleToDocument(locale);
+  }, [locale]);
+
+  useEffect(() => {
+    applyThemeToDocument(theme);
+  }, [theme]);
 
   useEffect(() => {
     const onOnline = () => setIsOnline(true);
@@ -304,9 +351,21 @@ export function AppProviders({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await authService.logout();
-    setUser(null);
-    setAuthStatus("unauthenticated");
+    try {
+      await authService.logout();
+    } catch {
+      // Clear local session state even if network/server logout fails
+    } finally {
+      accessTokenStore.clearAccessToken();
+      setUser(null);
+      setNotifications([]);
+      setUnreadCount(0);
+      setToasts([]);
+      setLastEvent(null);
+      setHubState("disconnected");
+      setSlowBootstrap(false);
+      setAuthStatus("unauthenticated");
+    }
   }, []);
 
   const changePassword = useCallback(async (req: ChangePasswordRequest) => {

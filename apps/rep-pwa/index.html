@@ -9,6 +9,17 @@
     <link rel="icon" type="image/png" href="/icons/pwa-192x192.png" />
     <link rel="apple-touch-icon" href="/icons/pwa-192x192.png" />
     <title>المومياء للمبيعات | AlMomiaa Rep PWA</title>
+    <script>
+      try {
+        var t = localStorage.getItem("almomiaa-rep-theme");
+        if (t === "dark") {
+          document.documentElement.setAttribute("data-theme", "dark");
+          document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body class="bg-surface-canvas text-text-primary antialiased">
     <div id="root"></div>

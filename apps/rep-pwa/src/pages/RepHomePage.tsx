@@ -23,12 +23,23 @@ function statusTone(status: string): "warning" | "success" | "danger" | "info" |
 }
 
 export function RepHomePage() {
-  const { locale, isAr, t, user, hasPermission, eventVersion, canInstallPwa, promptInstallPwa } = useApp();
+  const { locale, isAr, t, user, logout, hasPermission, eventVersion, canInstallPwa, promptInstallPwa } = useApp();
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<SalesOrderDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleSwitchAccount = async () => {
+    setSigningOut(true);
+    try {
+      await logout();
+      navigate("/login", { replace: true });
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   const loadHome = useCallback(async () => {
     setLoading(true);
@@ -74,11 +85,22 @@ export function RepHomePage() {
             </h1>
             <p className="mt-1 text-xs text-text-muted">{t.home.newSellRequestHint}</p>
           </div>
-          {canInstallPwa ? (
-            <Button size="compact" variant="secondary" onClick={() => void promptInstallPwa()}>
-              {t.home.installApp}
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+            {canInstallPwa ? (
+              <Button size="compact" variant="secondary" onClick={() => void promptInstallPwa()}>
+                {t.home.installApp}
+              </Button>
+            ) : null}
+            <Button
+              size="compact"
+              variant="ghost"
+              loading={signingOut}
+              onClick={() => void handleSwitchAccount()}
+              className="text-xs text-text-inverse hover:bg-surface-charcoal"
+            >
+              {signingOut ? t.auth.signingOut : t.auth.signOut}
             </Button>
-          ) : null}
+          </div>
         </div>
 
         <div className="mt-4">

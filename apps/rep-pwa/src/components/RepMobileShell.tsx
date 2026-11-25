@@ -72,6 +72,8 @@ export function RepMobileShell({ children, pendingCount = 0 }: RepMobileShellPro
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifTab, setNotifTab] = useState("unread");
   const [markingAll, setMarkingAll] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const [pwdOpen, setPwdOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -140,6 +142,17 @@ export function RepMobileShell({ children, pendingCount = 0 }: RepMobileShellPro
     }
   }
 
+  async function handleLogout() {
+    setSigningOut(true);
+    try {
+      await logout();
+      setAccountOpen(false);
+      navigate("/login", { replace: true });
+    } finally {
+      setSigningOut(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-surface-canvas pb-24 text-text-primary">
       <header className="sticky top-0 z-30 border-b border-surface-border bg-surface-obsidian text-text-inverse shadow-sm">
@@ -147,8 +160,8 @@ export function RepMobileShell({ children, pendingCount = 0 }: RepMobileShellPro
           <div className="flex min-w-0 items-center gap-2">
             <BrandLogo label={t.appName} compact />
             <div className="min-w-0">
-              <div className="truncate text-xs text-text-muted">
-                {isAr ? user?.fullNameAr : user?.fullNameEn}
+              <div className="truncate text-xs text-text-inverse-muted">
+                {isAr ? user?.fullNameAr : (user?.fullNameEn ?? user?.fullNameAr)}
               </div>
               <Badge tone={hubTone} size="sm">
                 {hubLabel}
@@ -171,28 +184,26 @@ export function RepMobileShell({ children, pendingCount = 0 }: RepMobileShellPro
               </Badge>
             </Button>
             <LocaleSwitcher value={locale} onChange={setLocale} />
-            <ThemeToggle value={theme} onChange={setTheme} />
+            <ThemeToggle
+              value={theme}
+              onChange={setTheme}
+              labels={{ light: t.auth.darkMode, dark: t.auth.lightMode }}
+            />
             <Button
               size="compact"
               variant="ghost"
-              onClick={() => {
-                setPwdError(null);
-                setCurrentPassword("");
-                setNewPassword("");
-                setConfirmNewPassword("");
-                setPwdOpen(true);
-              }}
+              onClick={() => setAccountOpen(true)}
               className="text-xs text-text-inverse hover:bg-surface-charcoal"
             >
-              {t.auth.changePassword}
+              {t.auth.account}
             </Button>
             <Button
               size="compact"
-              variant="ghost"
-              onClick={() => void logout()}
-              className="text-xs text-text-inverse hover:bg-surface-charcoal"
+              variant="danger"
+              loading={signingOut}
+              onClick={() => void handleLogout()}
             >
-              {t.auth.signOut}
+              {signingOut ? t.auth.signingOut : t.auth.signOut}
             </Button>
           </div>
         </div>
@@ -368,6 +379,63 @@ export function RepMobileShell({ children, pendingCount = 0 }: RepMobileShellPro
             required
           />
         </form>
+      </DrawerModal>
+
+      <DrawerModal
+        open={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        title={t.auth.accountTitle}
+        subtitle={t.auth.accountSubtitle}
+      >
+        <div className="space-y-4">
+          <div className="space-y-2 rounded-xl border border-surface-border bg-surface-canvas p-4">
+            <p className="text-xs text-text-secondary">{t.auth.signedInAs}</p>
+            <p className="text-base font-bold text-text-primary">
+              {isAr ? user?.fullNameAr : (user?.fullNameEn ?? user?.fullNameAr)}
+            </p>
+            <p className="font-mono text-xs text-text-secondary" dir="ltr">
+              {user?.employeeCode}
+            </p>
+            {user?.roleCodes && user.roleCodes.length > 0 ? (
+              <div className="pt-1">
+                <p className="mb-1.5 text-xs text-text-secondary">{t.auth.rolesLabel}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {user.roleCodes.map((role) => (
+                    <Badge key={role} tone="gold" mono>
+                      {role}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => {
+                setAccountOpen(false);
+                setPwdError(null);
+                setCurrentPassword("");
+                setNewPassword("");
+                setConfirmNewPassword("");
+                setPwdOpen(true);
+              }}
+            >
+              {t.auth.changePasswordTitle}
+            </Button>
+
+            <Button
+              variant="danger"
+              className="w-full"
+              loading={signingOut}
+              onClick={() => void handleLogout()}
+            >
+              {signingOut ? t.auth.signingOut : t.auth.switchAccount}
+            </Button>
+          </div>
+        </div>
       </DrawerModal>
     </div>
   );
